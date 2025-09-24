@@ -1,10 +1,13 @@
 use Parquet, CTypes, FileSystem;
 use UnitTest;
-/*use TestBase;*/
 
-/*require "../prereqs/cpp/obj/WriteParquet.o";*/
-/*require "../prereqs/cpp/include/WriteParquet.h";*/
 type c_string = c_ptrConst(c_char);
+
+proc testBasic(test: borrowed Test) throws {
+  test.assertTrue(testReadWrite("myFile.parquet".c_str(),
+                                "myDsetname".c_str(),
+                                size=1000));
+}
 
 proc testReadWrite(filename: c_string, dsetname: c_string, size: int) {
   extern proc c_readColumnByName(filename, chpl_arr, whereNull, colNum,
@@ -37,14 +40,10 @@ proc testReadWrite(filename: c_string, dsetname: c_string, size: int) {
     var chplMsg;
     try! chplMsg = string.createCopyingBuffer(errMsg, strlen(errMsg));
     writeln(chplMsg);
+    return false;
   }
     
-  if a.equals(b) {
-    return 0;
-  } else {
-    writeln("FAILED: read/write");
-    return 1;
-  }
+  return a.equals(b);
 }
 
 UnitTest.main();
