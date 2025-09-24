@@ -1,0 +1,13 @@
+[brick]
+chplVersion = "2.7.0"
+license = "None"
+name = "Parquet"
+type = "library"
+version = "0.1.0"
+
+[dependencies]
+
+[external]
+arrow = "arrow@19.0.1"
+
+
