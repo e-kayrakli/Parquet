@@ -9,5 +9,3 @@ version = "0.1.0"
 
 [external]
 arrow = "arrow@19.0.1"
-
-
