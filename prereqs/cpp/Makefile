@@ -33,22 +33,3 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 
 clean:
 	rm -rf $(OBJDIR) $(BINDIR)
-
-
-.PHONY: compile-arrow-cpp
-compile-arrow-cpp:
-	make compile-arrow-write
-	make compile-arrow-read
-	make compile-arrow-util
-
-.PHONY: compile-arrow-write
-compile-arrow-write:
-	$(CHPL_CXX) -O3 -std=c++17 -c $(ARROW_WRITE_CPP) -o $(ARROW_WRITE_O) $(INCLUDE_FLAGS)
-
-.PHONY: compile-arrow-read
-compile-arrow-read:
-	$(CHPL_CXX) -O3 -std=c++17 -c $(ARROW_READ_CPP) -o $(ARROW_READ_O) $(INCLUDE_FLAGS)
-
-.PHONY: compile-arrow-util
-compile-arrow-util:
-	$(CHPL_CXX) -O3 -std=c++17 -c $(ARROW_UTIL_CPP) -o $(ARROW_UTIL_O) $(INCLUDE_FLAGS)
