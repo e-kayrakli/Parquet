@@ -638,10 +638,6 @@ int cpp_appendColumnToParquet(const char* filename, void* chpl_arr,
   }
 }
 
-const char* cpp_getVersionInfo(void) {
-  return strdup(arrow::GetBuildInfo().version_string.c_str());
-}
-
 int cpp_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg) {
   try {
     std::shared_ptr<arrow::io::ReadableFile> infile;
@@ -824,10 +820,6 @@ extern "C" {
 
   int64_t c_getStringColumnNullIndices(const char* filename, const char* colname, void* chpl_nulls, char** errMsg) {
     return cpp_getStringColumnNullIndices(filename, colname, chpl_nulls, errMsg);
-  }
-
-  const char* c_getVersionInfo(void) {
-    return cpp_getVersionInfo();
   }
 
   int c_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg) {

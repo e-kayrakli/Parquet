@@ -139,9 +139,6 @@ extern "C" {
   int c_getPrecision(const char* filename, const char* colname, char** errMsg);
   int cpp_getPrecision(const char* filename, const char* colname, char** errMsg);
     
-  const char* c_getVersionInfo(void);
-  const char* cpp_getVersionInfo(void);
-
   int c_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg);
   int cpp_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg);
 
