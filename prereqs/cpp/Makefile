@@ -21,7 +21,7 @@ CXXFLAGS+=-I$(ARROW_DIR)/include
 all: $(CXX_OBJECTS)
 
 printchplflags:
-	$(info --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
+	@$(info --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
 
 # Rule to create object directory if it doesn't exist
 $(OBJDIR):
