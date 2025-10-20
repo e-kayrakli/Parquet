@@ -13,6 +13,8 @@ CXX_OBJECTS = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(CXX_SOURCES))
 
 CXXFLAGS=-I$(INCDIR)
 
+# assumes spack-installed arrow
+# TODO error check: spack exists? arrow installed?
 ARROW_DIR=$(shell spack find --paths --no-groups arrow | cut -d\   -f3)
 CXXFLAGS+=-I$(ARROW_DIR)/include
 
