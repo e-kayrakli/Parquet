@@ -1,11 +1,25 @@
 module Parquet {
   use CTypes;
 
+  enum CompressionType {
+    NONE=0,
+    SNAPPY=1,
+    GZIP=2,
+    BROTLI=3,
+    ZSTD=4,
+    LZ4=5
+  };
+
+
+
   import Reflection.{getModuleName as getM,
                      getRoutineName as getR,
                      getLineNumber as getL};
 
   import List.list;
+  import IO.format;
+  import FileSystem as FS;
+  import Path;
 
   extern var ARROWINT64: c_int;
   extern var ARROWINT32: c_int;
@@ -411,10 +425,8 @@ module Parquet {
       if filesExist {
         var datasets = getDatasets(filenames[0]);
         if datasets.contains(dsetname) then
-          throw getErrorWithContext(getL(), getM(), getR(),
-                                    msg="A column with name " + dsetname +
-                                        " already exists in Parquet file",
-                                    errorClass='WriteModeError');
+          throw new ParquetError("A column with name " + dsetname +
+                                 " already exists in Parquet file");
       }
     }
 
@@ -589,4 +601,105 @@ module Parquet {
                                                  call.errMsg);
     }
   }
+
+  proc toCDtype(dtype: string) throws {
+    select dtype {
+      when 'int64' {
+        return ARROWINT64;
+      } when 'uint32' {
+        return ARROWUINT32;
+      } when 'uint64' {
+        return ARROWUINT64;
+      } when 'bool' {
+        return ARROWBOOLEAN;
+      } when 'float64' {
+        return ARROWDOUBLE;
+      } when 'str' {
+        return ARROWSTRING;
+      } otherwise {
+        throw new ParquetError("Trying to convert unrecognized dtype " +
+                               "to Parquet type");
+        return ARROWERROR;
+      }
+    }
+  }
+
+  private proc processParquetFilenames(filenames: [] string,
+                                       matchingFilenames: [] string,
+                                       mode: int) throws {
+    var filesExist: bool = true;
+    if mode == APPEND {
+      if matchingFilenames.size == 0 {
+        // Files do not exist, so we can just create the files
+        filesExist = false;
+      }
+      else if matchingFilenames.size != filenames.size {
+        throw new ParquetError("Appending to existing files must be done with "+
+                               "the same number of locales. Try saving with a "+
+                               "different directory or filename prefix?");
+      }
+    } else if mode == TRUNCATE {
+      if matchingFilenames.size > 0 {
+        filesExist = true;
+      } else {
+        filesExist = false;
+      }
+    } else {
+      throw new ParquetError("The mode %? is invalid".format(mode));
+    }
+    return filesExist;
+  }
+
+  /* Copied verbatim from Arkouda. This is a general helper in Arkouda. */
+  private proc getFileMetadata(filename : string) {
+    const fields = filename.split(".");
+    var prefix: string;
+    var extension: string;
+
+    if fields.size == 1 || fields[fields.domain.high].count(Path.pathSep) > 0 {
+      prefix = filename;
+      extension = "";
+    } else {
+      prefix = ".".join(fields#(fields.size-1)); // take all but the last
+      extension = "." + fields[fields.domain.high];
+    }
+
+    return (prefix,extension);
+  }
+
+  /* Copied verbatim from Arkouda. This is a general helper in Arkouda. */
+  /*
+   * Generates a list of filenames to be written to based upon a file prefix,
+   * extension, and number of locales.
+   */
+  private proc generateFilenames(prefix : string, extension : string,
+                                 targetLocalesSize:int) : [] string throws {
+    /*
+     * Generates a file name composed of a prefix, which is a filename provided by
+     * the user along with a file index and extension.
+     */
+    proc generateFilename(prefix : string, extension : string,
+                          idx : int) : string throws {
+        var suffix = '%04i'.format(idx);
+        return "%s_LOCALE%s%s".format(prefix, suffix, extension);
+    }
+
+    // Generate the filenames based upon the number of targetLocales.
+    var filenames: [0..#targetLocalesSize] string;
+    for i in 0..#targetLocalesSize {
+      filenames[i] = generateFilename(prefix, extension, i);
+    }
+
+    return filenames;
+  }
+
+  /*
+   * Generates an array of filenames to be matched in APPEND mode and to be
+   * checked in TRUNCATE mode that will warn the user that 1..n files are
+   * being overwritten.
+   */
+  proc getMatchingFilenames(prefix : string, extension : string) throws {
+      return FS.glob("%s_LOCALE*%s".format(prefix, extension));
+  }
+
 }
