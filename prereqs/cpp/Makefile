@@ -18,16 +18,18 @@ CXXFLAGS=-I$(INCDIR)
 ARROW_DIR=$(shell spack find --paths --no-groups arrow | cut -d\   -f3)
 CXXFLAGS+=-I$(ARROW_DIR)/include
 
-# also add the src directory to be able to include ParquetSharedEnums without
-# relative path
-CXXFLAGS+=-I../../
+# also add the src directory to be able to include SharedEnums without
+# relative path. This path is relative to prereqs/cpp
+CXXFLAGS+=-I../../src
 
 .PHONY: all clean
 
 all: $(CXX_OBJECTS)
 
+# Note -I./src is to be able to use SharedEnums.chpl. This path is relative to
+# the project root
 printchplflags:
-	@$(info --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
+	@$(info -I./src/ --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
 
 # Rule to create object directory if it doesn't exist
 $(OBJDIR):
