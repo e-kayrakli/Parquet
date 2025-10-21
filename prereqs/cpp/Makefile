@@ -18,6 +18,10 @@ CXXFLAGS=-I$(INCDIR)
 ARROW_DIR=$(shell spack find --paths --no-groups arrow | cut -d\   -f3)
 CXXFLAGS+=-I$(ARROW_DIR)/include
 
+# also add the src directory to be able to include ParquetSharedEnums without
+# relative path
+CXXFLAGS+=-I../../
+
 .PHONY: all clean
 
 all: $(CXX_OBJECTS)
