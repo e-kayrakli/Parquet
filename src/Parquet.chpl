@@ -626,6 +626,24 @@ module Parquet {
     return call.retVal;
   }
 
+  proc getAllTypes(filename: string): [] c_int throws {
+    extern proc c_getAllTypes(filename, types_out, errMsg): c_int;
+
+    const numCols = getNumCols(filename);
+
+    var Types: [0..#numCols] c_int;
+
+    var call = new parquetCall(getL(), getR(), getM());
+    manage call {
+      call.retVal = c_getAllTypes(filename.c_str(),
+                                  c_ptrTo(Types),
+                                  call.errMsg);
+    }
+    if call.err then throw call.err;
+
+    return Types;
+  }
+
   proc toCDtype(dtype: string) throws {
     select dtype {
       when 'int64' {

@@ -20,5 +20,15 @@ proc testNumCols(test: borrowed Test) throws {
   test.assertTrue(getNumCols(filename) == 3);
 }
 
+proc testTypes(test: borrowed Test) throws {
+  const filename = "test/resources/multi-col.parquet";
+
+  const types = getAllTypes(filename);
+
+  test.assertEqual(types[0], ARROWINT64);
+  test.assertEqual(types[1], ARROWBOOLEAN);
+  test.assertEqual(types[2], ARROWINT64);
+}
+
 
 UnitTest.main();
