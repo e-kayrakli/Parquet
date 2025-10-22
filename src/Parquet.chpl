@@ -69,7 +69,19 @@ module Parquet {
     }
 
     proc deinit() {
-      if err then halt("Unhandled error in extern call");
+      // TODO errMsg is allocated through strdup in C++ code. As such, it
+      // doesn't use Chapel's allocators. So, we can't really adopt the buffer
+      // into a Chapel string for it causes segfaults when trying to free that
+      // buffer through Chapel's allocators.
+      extern proc c_free_string(ptr);
+      c_free_string(_errMsg);
+
+      // TODO this should be a thrown error in exitContext.
+      // https://github.com/chapel-lang/chapel/issues/27764
+      if err {
+        halt(try! "Unhandled error in extern call %s.%s (%i)".format(
+                       modName, procName, lineNo));
+      }
     }
 
     proc ref errMsg do return c_ptrTo(_errMsg);
@@ -81,7 +93,7 @@ module Parquet {
     proc ref exitContext(in err: owned Error?) {
       if retVal < 0 {
         var chplMsg;
-        try! chplMsg = string.createAdoptingBuffer(this._errMsg);
+        try! chplMsg = string.createCopyingBuffer(this._errMsg);
         this.err = new ParquetError(chplMsg);
       }
     }
@@ -600,6 +612,17 @@ module Parquet {
                                                  compression,
                                                  call.errMsg);
     }
+  }
+
+  proc getNumCols(filename: string) {
+    extern proc c_getNumCols(filename, errMsg): int(64);
+
+    var numCols: int;
+    manage new parquetCall(getL(), getR(), getM()) as call {
+      call.retVal = c_getNumCols(filename.c_str(), call.errMsg);
+      numCols = call.retVal;
+    }
+    return numCols;
   }
 
   proc toCDtype(dtype: string) throws {
