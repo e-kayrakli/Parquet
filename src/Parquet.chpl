@@ -698,7 +698,7 @@ module Parquet {
    * checked in TRUNCATE mode that will warn the user that 1..n files are
    * being overwritten.
    */
-  proc getMatchingFilenames(prefix : string, extension : string) throws {
+  private proc getMatchingFilenames(prefix : string, extension : string) throws {
       return FS.glob("%s_LOCALE*%s".format(prefix, extension));
   }
 
