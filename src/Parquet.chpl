@@ -614,15 +614,16 @@ module Parquet {
     }
   }
 
-  proc getNumCols(filename: string) {
+  proc getNumCols(filename: string) throws {
     extern proc c_getNumCols(filename, errMsg): int(64);
 
     var numCols: int;
-    manage new parquetCall(getL(), getR(), getM()) as call {
+    var call = new parquetCall(getL(), getR(), getM());
+    manage call {
       call.retVal = c_getNumCols(filename.c_str(), call.errMsg);
-      numCols = call.retVal;
     }
-    return numCols;
+    if call.err then throw call.err;
+    return call.retVal;
   }
 
   proc toCDtype(dtype: string) throws {
