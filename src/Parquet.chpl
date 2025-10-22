@@ -34,7 +34,7 @@ module Parquet {
   extern var ARROWDECIMAL: c_int;
 
 
-  private config const batchSize = 8192;
+  private config const defaultBatchSize = 8192;
   config const ROWGROUPS = 512*1024*1024 / numBytes(int); // 512 mb of int64
 
   const TRUNCATE: int = 0;
@@ -113,8 +113,8 @@ module Parquet {
      */
   proc readFilesByName(ref A: [] ?t, ref whereNull: [] bool,
                        filenames: [] string, sizes: [] int, dsetname: string,
-                       ty, byteLength=-1, hasNonFloatNulls=false,
-                       param hasWhereNull=true) throws {
+                       ty, batchSize=defaultBatchSize, byteLength=-1,
+                       hasNonFloatNulls=false, param hasWhereNull=true) throws {
     extern proc c_readColumnByName(filename, arr_chpl, where_null_chpl, colNum,
                                    numElems, startIdx, batchSize, byteLength,
                                    hasNonFloatNulls, errMsg): int;
@@ -155,7 +155,7 @@ module Parquet {
   }
 
   proc readStrFilesByName(ref A: [] ?t, filenames: [] string, sizes: [] int,
-                          dsetname: string) throws {
+                          dsetname: string, batchSize=defaultBatchSize) throws {
       extern proc c_readStrColumnByName(filename, arr_chpl, colname, numElems,
                                         batchSize, errMsg): int;
 
@@ -219,7 +219,7 @@ module Parquet {
                                                    dsetname.localize().c_str(),
                                                    filedom.size,
                                                    0,
-                                                   batchSize,
+                                                   defaultBatchSize,
                                                    call.errMsg);
             }
             A[filedom] = col;
@@ -455,17 +455,8 @@ module Parquet {
           valPtr = c_ptrTo(locArr);
         }
         if mode == TRUNCATE || !filesExist {
-          manage new parquetCall(getL(), getR(), getM()) as call {
-            call.retVal = c_writeColumnToParquet(myFilename.localize().c_str(),
-                                                 valPtr,
-                                                 0,
-                                                 dsetname.localize().c_str(),
-                                                 locDom.size,
-                                                 rowGroupSize,
-                                                 dtypeRep,
-                                                 compression,
-                                                 call.errMsg);
-          }
+          writeColumn(filename, dsetname, A, dtypeRep, locDom, rowGroupSize,
+                      compression);
         } else {
           manage new parquetCall(getL(), getR(), getM()) as call {
             call.retVal = c_appendColumnToParquet(myFilename.localize().c_str(),
@@ -642,6 +633,58 @@ module Parquet {
     if call.err then throw call.err;
 
     return Types;
+  }
+
+  proc writeColumn(filename, colName, const ref Arr: [], dtype,
+                   const ref WriteDom: domain(?) = Arr.domain,
+                   rowGroupSize=ROWGROUPS,
+                   compression=CompressionType.NONE) throws {
+    extern proc c_writeColumnToParquet(filename, arr_chpl, colnum,
+                                       dsetname, numelems, rowGroupSize,
+                                       dtype, compression, errMsg): int;
+
+    var call = new parquetCall(getL(), getR(), getM());
+    manage call {
+      call.retVal = c_writeColumnToParquet(filename.localize().c_str(),
+                                           arr_chpl=c_ptrToConst(Arr[WriteDom.low]),
+                                           colnum=0,
+                                           dsetname=colName.localize().c_str(),
+                                           numelems=WriteDom.size,
+                                           rowGroupSize=ROWGROUPS,
+                                           dtype=dtype,
+                                           compression=compression,
+                                           call.errMsg);
+    }
+    if call.err then throw call.err;
+  }
+
+
+  proc readColumn(filename, colName, ref Arr: [], ref WhereNull: [] = [0],
+                  const ref ReadDom: domain(?) = Arr.domain, startIdx=0,
+                  batchSize=defaultBatchSize, byteLength=-1,
+                  hasNonFloatNulls=false) throws {
+
+    extern proc c_readColumnByName(filename, arr_chpl, where_null_chpl,
+                                    colName, numElems, startIdx, batchSize,
+                                    byteLength, hasNonFloatNulls, errMsg): int;
+
+    var whereNullPtr = if hasNonFloatNulls then c_ptrTo(WhereNull[ReadDom.low])
+                                           else nil;
+
+    var call = new parquetCall(getL(), getR(), getM());
+    manage call {
+      call.retVal = c_readColumnByName(filename=filename.localize().c_str(),
+                                       arr_chpl=c_ptrTo(Arr[ReadDom.low]),
+                                       where_null_chpl=whereNullPtr,
+                                       colName=colName.localize().c_str(),
+                                       numElems=Arr.size,
+                                       startIdx=startIdx,
+                                       batchSize=batchSize,
+                                       byteLength=byteLength,
+                                       hasNonFloatNulls=hasNonFloatNulls,
+                                       call.errMsg);
+    }
+    if call.err then throw call.err;
   }
 
   proc toCDtype(dtype: string) throws {
