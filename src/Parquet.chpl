@@ -51,6 +51,16 @@ module Parquet {
                     double, float, list, decimal,
                     notimplemented };
 
+  proc chplTypeToCType(type t) {
+    select t {
+      when int(64) do return ARROWINT64;
+      when int(32) do return ARROWINT32;
+      when uint(64) do return ARROWUINT64;
+      when uint(32) do return ARROWUINT32;
+      when bool do return ARROWBOOLEAN;
+      otherwise do compilerError("Unsupported Chapel type: ", t:string);
+    }
+  }
 
   record parquetCall: contextManager {
     var _errMsg: c_ptr(uint(8));
@@ -410,7 +420,7 @@ module Parquet {
     return typeFromCType(call.retVal);
   }
 
-  proc writeDistArrayToParquet(A, filename, dsetname, dtype, rowGroupSize,
+  proc writeDistArrayToParquet(A, filename, dsetname, rowGroupSize,
                                compression, mode) throws {
     extern proc c_writeColumnToParquet(filename, arr_chpl, colnum,
                                        dsetname, numelems, rowGroupSize,
@@ -419,7 +429,6 @@ module Parquet {
                                         dsetname, numelems,
                                         dtype, compression,
                                         errMsg): int;
-    var dtypeRep = toCDtype(dtype);
     var (prefix, extension) = getFileMetadata(filename);
 
     // Generate the filenames based upon the number of targetLocales.
@@ -455,15 +464,15 @@ module Parquet {
           valPtr = c_ptrTo(locArr);
         }
         if mode == TRUNCATE || !filesExist {
-          writeColumn(filename, dsetname, A, dtypeRep, locDom, rowGroupSize,
-                      compression);
+          writeColumn(filename, dsetname, A, locDom, rowGroupSize, compression);
         } else {
+          const dtype = chplTypeToCType(A.eltType);
           manage new parquetCall(getL(), getR(), getM()) as call {
             call.retVal = c_appendColumnToParquet(myFilename.localize().c_str(),
                                                   valPtr,
                                                   dsetname.localize().c_str(),
                                                   locDom.size,
-                                                  dtypeRep,
+                                                  dtype,
                                                   compression,
                                                   call.errMsg);
           }
@@ -525,9 +534,9 @@ module Parquet {
     }
   }
 
-  proc write1DDistArrayParquet(filename: string, dsetname, dtype, compression,
+  proc write1DDistArrayParquet(filename: string, dsetname, compression,
                                mode, A) throws {
-    return writeDistArrayToParquet(A, filename, dsetname, dtype, ROWGROUPS,
+    return writeDistArrayToParquet(A, filename, dsetname, ROWGROUPS,
                                    compression, mode);
   }
 
@@ -635,13 +644,15 @@ module Parquet {
     return Types;
   }
 
-  proc writeColumn(filename, colName, const ref Arr: [], dtype,
+  proc writeColumn(filename, colName, const ref Arr: [],
                    const ref WriteDom: domain(?) = Arr.domain,
                    rowGroupSize=ROWGROUPS,
                    compression=CompressionType.NONE) throws {
     extern proc c_writeColumnToParquet(filename, arr_chpl, colnum,
                                        dsetname, numelems, rowGroupSize,
                                        dtype, compression, errMsg): int;
+
+    const dtype = chplTypeToCType(Arr.eltType);
 
     var call = new parquetCall(getL(), getR(), getM());
     manage call {

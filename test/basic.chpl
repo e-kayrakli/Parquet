@@ -11,10 +11,7 @@ proc testDistributedWriteRead(test: borrowed Test) throws {
 
   ArrOut = 2;
   write1DDistArrayParquet("testDistributedWriteRead.parquet", "Arr",
-                          ArrowTypes.int64:string,
                           CompressionType.NONE, TRUNCATE, ArrOut);
-
-  
 }
 
 proc testWriteRead(test: borrowed Test) throws {
@@ -25,7 +22,7 @@ proc testWriteRead(test: borrowed Test) throws {
 
   const filename = "testWriteRead.parquet";
 
-  writeColumn(filename=filename, colName="Arr", Arr=ArrOut, dtype=ARROWINT64);
+  writeColumn(filename=filename, colName="Arr", Arr=ArrOut);
 
   test.assertEqual(getNumCols(filename), 1);
   test.assertEqual(getAllTypes(filename)[0], ARROWINT64);
