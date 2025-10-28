@@ -658,26 +658,46 @@ module Parquet {
     if call.err then throw call.err;
   }
 
-
+  /* This is the Chapel array-based interface */
   proc readColumn(filename, colName, ref Arr: [], ref WhereNull: [] = [0],
                   const ref ReadDom: domain(?) = Arr.domain, startIdx=0,
                   batchSize=defaultBatchSize, byteLength=-1,
                   hasNonFloatNulls=false) throws {
 
+    var whereNullPtr = if hasNonFloatNulls then c_ptrTo(WhereNull[ReadDom.low])
+                                           else nil;
+
+    readColumn(filename=filename,
+               colName=colName,
+               ptr=c_ptrTo(Arr[ReadDom.low]),
+               whereNullPtr=whereNullPtr,
+               numElems=ReadDom.size,
+               startIdx=startIdx,
+               batchSize=batchSize,
+               byteLength=byteLength,
+               hasNonFloatNulls=hasNonFloatNulls);
+  }
+
+  /* This is the C pointer based interface */
+  proc readColumn(filename, colName, ptr: c_ptr(void),
+                  whereNullPtr: c_ptr(void), const numElems: int, startIdx=0,
+                  batchSize=defaultBatchSize, byteLength=-1,
+                  hasNonFloatNulls=false) throws {
+
+    // TODO this should probably do dynamic type checking 
+    // TODO Arr should be local
+
     extern proc c_readColumnByName(filename, arr_chpl, where_null_chpl,
                                     colName, numElems, startIdx, batchSize,
                                     byteLength, hasNonFloatNulls, errMsg): int;
 
-    var whereNullPtr = if hasNonFloatNulls then c_ptrTo(WhereNull[ReadDom.low])
-                                           else nil;
-
     var call = new parquetCall(getL(), getR(), getM());
     manage call {
       call.retVal = c_readColumnByName(filename=filename.localize().c_str(),
-                                       arr_chpl=c_ptrTo(Arr[ReadDom.low]),
+                                       arr_chpl=ptr,
                                        where_null_chpl=whereNullPtr,
                                        colName=colName.localize().c_str(),
-                                       numElems=Arr.size,
+                                       numElems=numElems,
                                        startIdx=startIdx,
                                        batchSize=batchSize,
                                        byteLength=byteLength,
