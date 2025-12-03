@@ -4,10 +4,15 @@ ifeq ($(CHPL_CXX),)
 CHPL_CXX=$(CXX)
 endif
 
-INCDIR = include
-SRCDIR = src
-OBJDIR = obj
+# trick from https://www.systutorials.com/how-to-get-the-full-path-and-directory-of-a-makefile-itself/#:~:text=ByEric%20Ma%20Mar%2024,Read%20more:
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_DIR := $(dir $(MKFILE_PATH))
 
+INCDIR = $(MKFILE_DIR)/include
+SRCDIR = $(MKFILE_DIR)/src
+OBJDIR = $(MKFILE_DIR)/obj
+
+CXX_HEADERS = $(wildcard $(INCDIR)/*.h)
 CXX_SOURCES = $(wildcard $(SRCDIR)/*.cpp)
 CXX_OBJECTS = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(CXX_SOURCES))
 
@@ -29,7 +34,7 @@ all: $(CXX_OBJECTS)
 # Note -I./src is to be able to use SharedEnums.chpl. This path is relative to
 # the project root
 printchplflags:
-	@$(info -I./src/ --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
+	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I./src/ --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
 
 # Rule to create object directory if it doesn't exist
 $(OBJDIR):
