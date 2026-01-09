@@ -1,5 +1,9 @@
 use UnitTest;
 use Parquet;
+use TestUtil;
+
+import Path;
+import FileSystem as FS;
 
 import BlockDist.blockDist;
 
@@ -10,8 +14,20 @@ proc testDistributedWriteRead(test: borrowed Test) throws {
   var ArrOut, ArrIn = blockDist.createArray(1..n, int);
 
   ArrOut = 2;
-  write1DDistArrayParquet("testDistributedWriteRead.parquet", "Arr",
-                          CompressionType.NONE, TRUNCATE, ArrOut);
+
+  manage new tempDir() as temp {
+    const filePath = Path.joinPath(temp.path,
+                                   "testDistributedWriteRead.parquet");
+
+    write1DDistArrayParquet(filePath, "Arr", CompressionType.NONE, TRUNCATE,
+                            ArrOut);
+
+    test.assertTrue(FS.isFile(filePath));
+
+    readColumn(filename=filePath, colName="Arr", Arr=ArrIn);
+
+    test.assertEqual(ArrOut, ArrIn);
+  }
 }
 
 proc testWriteRead(test: borrowed Test) throws {
