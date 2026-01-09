@@ -36,16 +36,19 @@ proc testWriteRead(test: borrowed Test) throws {
   var ArrOut, ArrIn: [1..n] int;
   ArrOut = val;
 
-  const filename = "testWriteRead.parquet";
+  manage new tempDir() as temp {
+    const filePath = Path.joinPath(temp.path,
+                                   "testWriteRead.parquet");
 
-  writeColumn(filename=filename, colName="Arr", Arr=ArrOut);
+    writeColumn(filename=filePath, colName="Arr", Arr=ArrOut);
 
-  test.assertEqual(getNumCols(filename), 1);
-  test.assertEqual(getAllTypes(filename)[0], ARROWINT64);
+    test.assertEqual(getNumCols(filePath), 1);
+    test.assertEqual(getAllTypes(filePath)[0], ARROWINT64);
 
-  readColumn(filename=filename, colName="Arr", Arr=ArrIn);
+    readColumn(filename=filePath, colName="Arr", Arr=ArrIn);
 
-  test.assertEqual(+ reduce ArrIn, val*n);
+    test.assertEqual(+ reduce ArrIn, val*n);
+  }
 }
 
 proc testNumCols(test: borrowed Test) throws {
