@@ -10,6 +10,30 @@ import BlockDist.blockDist;
 config const n = 100;
 
 
+proc testMultiColWriteRead(test: borrowed Test) throws {
+  var Arr1, Arr2, Arr3: [1..10] int;
+  Arr1 = 1;
+  Arr2 = 2;
+  Arr3 = 3;
+
+  var In: [1..10] int;
+
+  manage new tempDir() as temp {
+    const filePath = Path.joinPath(temp.path,
+                                   "testMultiColWriteRead.parquet");
+
+    writeTable(filePath, colNames=("Arr1", "Arr2", "Arr3"),
+               Arr1, Arr2, Arr3);
+
+    readColumn(filePath, "Arr1", In);
+    assertEqual(Arr1, In);
+    readColumn(filePath, "Arr2", In);
+    assertEqual(Arr2, In);
+    readColumn(filePath, "Arr3", In);
+    assertEqual(Arr3, In);
+  }
+}
+
 proc testDistributedWriteRead(test: borrowed Test) throws {
   var ArrOut, ArrIn = blockDist.createArray(1..n, int);
 
