@@ -1,5 +1,6 @@
 module Parquet {
   use CTypes;
+  use BlockDist;
 
   enum CompressionType {
     NONE=0,
@@ -455,7 +456,7 @@ module Parquet {
         const myFilename = filenames[idx];
 
         var locDom = A.localSubdomain();
-        var locArr = A[locDom];
+        var locArr = A[locDom]; // Engin: why are we doing this??
 
         numElemsPerFile[idx] = locDom.size;
 
@@ -667,6 +668,95 @@ module Parquet {
                                            call.errMsg);
     }
     if call.err then throw call.err;
+  }
+
+  record pqWriteLocalChunkInfo {
+    var c_colName: c_ptrConst(c_char);
+    var c_data: c_ptrConst(void);
+    var c_type: int;
+    var size: int;
+  }
+
+  record pqWriteOp {
+
+    var filenameBase: string;
+    var sharedDom: domain(?);
+
+    // per locale store for pqWriteLocalChunkInfo
+    var info = blockDist.createArray(sharedDom.targetLocales().domain,
+                                     list(pqWriteLocalChunkInfo),
+                                     targetLocales=sharedDom.targetLocales());
+
+    var colCount: int;
+
+    proc registerColumn(A: [?colDom] ?eltType, colName: string) {
+      // TODO check domain alignment
+
+      coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
+        on loc {
+          const ref localSubDom = A.localSubdomain();
+
+          localInfo.pushBack(
+              new pqWriteLocalChunkInfo(colName.localize().c_str(),
+                                        c_ptrTo(A[localSubDom.first]),
+                                        chplTypeToCType(eltType),
+                                        localSubDom.size));
+        }
+      }
+
+      colCount += 1;
+    }
+
+    proc write() {
+      extern proc c_writeMultiColNumericToParquet(filename, column_names,
+                                                  ptr_arr, objTypes, datatypes,
+                                                  colnum, numelems,
+                                                  rowGroupSize, compression,
+                                                  errMsg): c_int;
+
+      coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
+        on loc {
+          assert(localInfo.size == colCount);
+
+          const colDom = {0..#colCount};
+
+          var c_colNames: [colDom] c_ptrConst(c_char);
+          var c_datas: [colDom] c_ptrConst(void);
+          var c_types: [colDom] int;
+          var sizes: [colDom] int;
+
+          for (colInfo,   c_colName,  c_data,  c_type,  size) in
+           zip(localInfo, c_colNames, c_datas, c_types, sizes) {
+
+             c_colName = colInfo.c_colName;
+             c_data = colInfo.c_data;
+             c_type = colInfo.c_type;
+             size = colInfo.size;
+          }
+
+          const c_filename = filenameBase.localize().c_str();
+          manage new parquetCall(getL(), getR(), getM()) as call {
+            call.retVal = c_writeMultiColNumericToParquet(c_filename,
+                                                          c_ptrTo(c_colNames),
+                                                          c_ptrTo(c_datas),
+                                                          c_ptrTo(c_types),
+                                                          colCount,
+                                                          c_ptrTo(sizes),
+                                                          ROWGROUPS,
+                                                          compression=0,
+                                                          call.errMsg);
+          }
+        }
+      }
+    }
+  }
+
+  proc writeTable(filename, colNames, Arrs...) {
+    var op = new pqWriteOp(filename, Arrs[0].domain);
+
+    for i in 0..<Arrs.size do op.registerColumn(Arrs[i], colNames[i]);
+
+    op.write();
   }
 
   /* This is the Chapel array-based interface */

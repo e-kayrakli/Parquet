@@ -51,6 +51,12 @@ extern "C" {
                                       void* chpl_arr, const char* dsetname, int64_t numelems,
                                       int64_t rowGroupSize, int64_t dtype, int64_t compression,
                                       char** errMsg);
+
+  int c_writeMultiColNumericToParquet(const char* filename, void* column_names,
+                                      void** ptr_arr, void* objTypes,
+                                      void* datatypes, int64_t colnum,
+                                      int64_t numelems, int64_t rowGroupSize,
+                                      int64_t compression, char** errMsg);
   
 #ifdef __cplusplus
 }
