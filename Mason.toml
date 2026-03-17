@@ -1,10 +1,11 @@
 
 [brick]
-chplVersion = "2.7.0"
-license = "None"
 name = "Parquet"
 type = "library"
 version = "0.0.1"
+chplVersion = "2.7.0"
+license = "None"
+source = "https://github.com/ShreyasKhandekar/Parquet"
 
 [dependencies]
 
