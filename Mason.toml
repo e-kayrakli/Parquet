@@ -12,5 +12,3 @@ source = "https://github.com/e-kayrakli/Parquet"
 [system]
 arrow = "19.0.1"
 parquet = "19.0.1"
-
-
