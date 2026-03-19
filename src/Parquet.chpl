@@ -689,7 +689,7 @@ module Parquet {
 
     var colCount: int;
 
-    proc registerColumn(A: [?colDom] ?eltType, colName: string) {
+    proc ref registerColumn(A: [?colDom] ?eltType, colName: string) {
       // TODO check domain alignment
 
       coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
@@ -751,7 +751,7 @@ module Parquet {
     }
   }
 
-  proc writeTable(filename, colNames, Arrs...) {
+  proc writeTable(filename, colNames, ref Arrs...) {
     var op = new pqWriteOp(filename, Arrs[0].domain);
 
     for i in 0..<Arrs.size do op.registerColumn(Arrs[i], colNames[i]);
