@@ -723,6 +723,7 @@ module Parquet {
           var c_colNames: [colDom] c_ptrConst(c_char);
           var c_datas: [colDom] c_ptrConst(void);
           var c_types: [colDom] int;
+          var c_objTypes: [colDom] int = 1;
           var sizes: [colDom] int;
 
           for (colInfo,   c_colName,  c_data,  c_type,  size) in
@@ -739,6 +740,7 @@ module Parquet {
             call.retVal = c_writeMultiColNumericToParquet(c_filename,
                                                           c_ptrTo(c_colNames),
                                                           c_ptrTo(c_datas),
+                                                          c_ptrTo(c_objTypes),
                                                           c_ptrTo(c_types),
                                                           colCount,
                                                           c_ptrTo(sizes),
