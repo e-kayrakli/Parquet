@@ -743,7 +743,7 @@ module Parquet {
                                                           c_ptrTo(c_objTypes),
                                                           c_ptrTo(c_types),
                                                           colCount,
-                                                          c_ptrTo(sizes),
+                                                          sizes[0],
                                                           ROWGROUPS,
                                                           compression=0,
                                                           call.errMsg);
