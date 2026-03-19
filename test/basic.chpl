@@ -26,11 +26,11 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
                Arr1, Arr2, Arr3);
 
     readColumn(filePath, "Arr1", In);
-    assertEqual(Arr1, In);
+    test.assertEqual(Arr1, In);
     readColumn(filePath, "Arr2", In);
-    assertEqual(Arr2, In);
+    test.assertEqual(Arr2, In);
     readColumn(filePath, "Arr3", In);
-    assertEqual(Arr3, In);
+    test.assertEqual(Arr3, In);
   }
 }
 
