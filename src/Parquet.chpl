@@ -21,17 +21,17 @@ module Parquet {
   import FileSystem as FS;
   import Path;
 
-  extern var ARROWINT64: c_int;
-  extern var ARROWINT32: c_int;
-  extern var ARROWUINT64: c_int;
-  extern var ARROWUINT32: c_int;
-  extern var ARROWBOOLEAN: c_int;
-  extern var ARROWSTRING: c_int;
-  extern var ARROWFLOAT: c_int;
-  extern var ARROWLIST: c_int;
-  extern var ARROWDOUBLE: c_int;
-  extern var ARROWERROR: c_int;
-  extern var ARROWDECIMAL: c_int;
+  extern const ARROWINT64: c_int;
+  extern const ARROWINT32: c_int;
+  extern const ARROWUINT64: c_int;
+  extern const ARROWUINT32: c_int;
+  extern const ARROWBOOLEAN: c_int;
+  extern const ARROWFLOAT: c_int;
+  extern const ARROWSTRING: c_int;
+  extern const ARROWDOUBLE: c_int;
+  extern const ARROWLIST: c_int;
+  extern const ARROWDECIMAL: c_int;
+  extern const ARROWERROR: c_int;
 
 
   private config const defaultBatchSize = 8192;

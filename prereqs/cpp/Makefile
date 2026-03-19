@@ -45,4 +45,4 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(CHPL_CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
+	rm -rf $(OBJDIR)
