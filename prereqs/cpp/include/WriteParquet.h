@@ -32,6 +32,21 @@ extern "C" {
                                   const char* dsetname, int64_t numelems,
                                   int64_t rowGroupSize, int64_t dtype, int64_t compression,
                                   char** errMsg);
+
+  int createFileWriter(const char* filename, void* column_names,
+                       void* objTypes, void* datatypes, int64_t colnum,
+                       int64_t compression, void** outWriter, void** errMsg);
+  int closeFileWriter(void* wrapper, char** errMsg);
+
+  void* c_appendRowGroup(void* wrapper);
+
+  void* c_nextColumn(void* wrapper);
+
+  void c_writeBatch(void* ptr, void* ptr_arr, void* def_levels,
+                     void* rep_levels, int64_t batchSize);
+
+  void c_writeBatchString(void* ptr, int64_t len, uint8_t* ptr_arr, void* def_levels,
+                          void* rep_levels, int64_t batchSize);
   
   int c_writeMultiColToParquet(const char* filename, void* column_names, 
                                 void** ptr_arr, void** offset_arr, void* objTypes, void* datatypes,
@@ -60,4 +75,20 @@ extern "C" {
   
 #ifdef __cplusplus
 }
+
+class FileWriterWrapper {
+  public:
+  std::shared_ptr<arrow::io::FileOutputStream> outfile;
+  std::shared_ptr<parquet::schema::GroupNode> schema;
+  std::shared_ptr<parquet::WriterProperties> props;
+  std::shared_ptr<parquet::ParquetFileWriter> fileWriter;
+
+  FileWriterWrapper(std::shared_ptr<arrow::io::FileOutputStream> outfile,
+                    std::shared_ptr<parquet::schema::GroupNode> schema,
+                    std::shared_ptr<parquet::WriterProperties> props,
+                    std::shared_ptr<parquet::ParquetFileWriter> fileWriter)
+    : outfile(outfile), schema(schema), props(props), fileWriter(fileWriter) {}
+};
+
+
 #endif

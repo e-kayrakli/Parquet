@@ -560,6 +560,94 @@ int cpp_writeMultiColNumericToParquet(const char* filename, void* column_names,
   }
 }
 
+
+int createFileWriter(const char* filename, void* column_names,
+                     void* objTypes, void* datatypes, int64_t colnum,
+                     int64_t compression, void** outWriter, void** errMsg) {
+  try {
+    // initialize the file to write to
+    using FileClass = ::arrow::io::FileOutputStream;
+    std::shared_ptr<FileClass> out_file;
+    ARROWRESULT_OK(FileClass::Open(filename), out_file);
+
+    // Setup the parquet schema
+    std::shared_ptr<parquet::schema::GroupNode> schema = SetupSchema(column_names, objTypes, datatypes, colnum);
+
+    parquet::WriterProperties::Builder builder;
+    // assign the proper compression
+    if(compression == SNAPPY_COMP) {
+      builder.compression(parquet::Compression::SNAPPY);
+    } else if (compression == GZIP_COMP) {
+      builder.compression(parquet::Compression::GZIP);
+    } else if (compression == BROTLI_COMP) {
+      builder.compression(parquet::Compression::BROTLI);
+    } else if (compression == ZSTD_COMP) {
+      builder.compression(parquet::Compression::ZSTD);
+    } else if (compression == LZ4_COMP) {
+      builder.compression(parquet::Compression::LZ4);
+    }
+    std::shared_ptr<parquet::WriterProperties> props = builder.build();
+
+    std::shared_ptr<parquet::ParquetFileWriter> file_writer =
+      parquet::ParquetFileWriter::Open(out_file, schema, props);
+
+    FileWriterWrapper* wrapper = new FileWriterWrapper(out_file, schema, props, file_writer);
+    *outWriter = (void*)wrapper;
+    return 0;
+  } catch (const std::exception& e) {
+    *errMsg = strdup(e.what());
+    return ARROWERROR;
+  }
+}
+
+int closeFileWriter(void* wrapper, char** errMsg) {
+  auto fileWriterWrapper = (FileWriterWrapper*) wrapper;
+  fileWriterWrapper->fileWriter->Close();
+  ARROWSTATUS_OK(fileWriterWrapper->outfile->Close());
+  //delete fileWriterWrapper;
+
+  return 0;
+}
+
+void* c_appendRowGroup(void* wrapper) {
+  auto fileWriterWrapper = (FileWriterWrapper*) wrapper;
+  return (void*) fileWriterWrapper->fileWriter->AppendRowGroup();
+}
+
+void* c_nextColumn(void* wrapper) {
+  auto rg_writer = (parquet::RowGroupWriter*)wrapper;
+  return rg_writer->NextColumn();
+}
+
+void c_writeBatch(void* ptr, void* ptr_arr, void* def_levels,
+                   void* rep_levels, int64_t batchSize) {
+  auto genericWriter = static_cast<parquet::ColumnWriter*>(ptr);
+
+#define CASE(EN, KIND, TYPE) \
+case parquet::Type::EN: \
+      static_cast<parquet::KIND##Writer*>(ptr)->WriteBatch(batchSize, \
+        (int16_t*)def_levels, (int16_t*)rep_levels, \
+        (TYPE*)ptr_arr); break;
+
+  switch(genericWriter->type()) {
+    CASE(BOOLEAN, Bool, bool)
+    CASE(INT32, Int32, int32_t)
+    CASE(INT64, Int64, int64_t)
+    CASE(FLOAT, Float, float)
+    CASE(DOUBLE, Double, double)
+    default: assert(false);
+  }
+
+#undef CASE
+}
+
+void c_writeBatchString(void* ptr, int64_t len, uint8_t* ptr_arr, void* def_levels,
+                        void* rep_levels, int64_t batchSize) {
+  parquet::ByteArray value(len, ptr_arr);
+  auto writer = static_cast<parquet::ByteArrayWriter*>(ptr);
+  writer->WriteBatch(batchSize, (int16_t*)def_levels, (int16_t*)rep_levels, &value);
+}
+
 int cpp_writeMultiColToParquet(const char* filename, void* column_names,
                                void** ptr_arr, void** offset_arr,
                                void* objTypes, void* datatypes,

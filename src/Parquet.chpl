@@ -34,6 +34,48 @@ module Parquet {
   extern const ARROWDECIMAL: c_int;
   extern const ARROWERROR: c_int;
 
+  class FileWriter {
+    var _wrapper : c_ptr(void);
+
+    proc AppendRowGroup() {
+      extern proc c_appendRowGroup(wrapper): c_ptr(void);
+
+      return new RowGroupWriter(c_appendRowGroup(_wrapper));
+    }
+
+    proc close() {
+      extern proc closeFileWriter(wrapper, errMsg): c_int;
+      manage new parquetCall(getL(), getR(), getM()) as call {
+        call.retVal = closeFileWriter(_wrapper, call.errMsg);
+      }
+    }
+  }
+
+  class RowGroupWriter {
+    var _ptr : c_ptr(void);
+
+    proc NextColumn() {
+      extern proc c_nextColumn(ptr): c_ptr(void);
+
+      return new ColumnWriter(c_nextColumn(_ptr));
+    }
+  }
+
+  class ColumnWriter {
+    var _ptr : c_ptr(void);
+
+    proc WriteBatch(values, defLevels, repLevels, numValues) {
+      extern proc c_writeBatch(ptr, values, defLevels, repLevels, numValues): c_int;
+
+      c_writeBatch(_ptr, values, defLevels, repLevels, numValues);
+    }
+
+    proc WriteString(len, cstr, defLevels, repLevels) {
+      extern proc c_writeBatchString(ptr, len, cstr, defLevels, repLevels, numValues): c_int;
+
+      c_writeBatchString(_ptr, len, cstr, defLevels, repLevels, 1);
+    }
+  }
 
   private config const defaultBatchSize = 8192;
   config const ROWGROUPS = 512*1024*1024 / numBytes(int); // 512 mb of int64
@@ -59,6 +101,7 @@ module Parquet {
       when uint(64) do return ARROWUINT64;
       when uint(32) do return ARROWUINT32;
       when bool do return ARROWBOOLEAN;
+      when string do return ARROWSTRING;
       otherwise do compilerError("Unsupported Chapel type: ", t:string);
     }
   }
@@ -696,9 +739,11 @@ module Parquet {
         on loc {
           const ref localSubDom = A.localSubdomain();
 
+          var ptr = c_pointer_return(A[localSubDom.first]);
+
           localInfo.pushBack(
               new pqWriteLocalChunkInfo(colName.localize().c_str(),
-                                        c_ptrTo(A[localSubDom.first]),
+                                        ptr,
                                         chplTypeToCType(eltType),
                                         localSubDom.size));
         }
@@ -708,11 +753,12 @@ module Parquet {
     }
 
     proc write() {
-      extern proc c_writeMultiColNumericToParquet(filename, column_names,
-                                                  ptr_arr, objTypes, datatypes,
-                                                  colnum, numelems,
-                                                  rowGroupSize, compression,
-                                                  errMsg): c_int;
+      extern proc createFileWriter(filename, column_names,
+                                   objTypes, datatypes,
+                                   colnum,
+                                   compression,
+                                   writer,
+                                   errMsg): c_int;
 
       coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
         on loc {
@@ -736,18 +782,45 @@ module Parquet {
           }
 
           const c_filename = filenameBase.localize().c_str();
+          var writer = new FileWriter();
           manage new parquetCall(getL(), getR(), getM()) as call {
-            call.retVal = c_writeMultiColNumericToParquet(c_filename,
-                                                          c_ptrTo(c_colNames),
-                                                          c_ptrTo(c_datas),
-                                                          c_ptrTo(c_objTypes),
-                                                          c_ptrTo(c_types),
-                                                          colCount,
-                                                          sizes[0],
-                                                          ROWGROUPS,
-                                                          compression=0,
-                                                          call.errMsg);
+            call.retVal = createFileWriter(c_filename,
+                                           c_ptrTo(c_colNames),
+                                           c_ptrTo(c_objTypes),
+                                           c_ptrTo(c_types),
+                                           colCount,
+                                           compression=0,
+                                           c_ptrTo(writer._wrapper),
+                                           call.errMsg);
           }
+
+          var numLeft = sizes[0];
+
+          // TODO:
+          // - implement other data types
+          // - implement SEGARRAY?
+          for i in 0..#numLeft by ROWGROUPS {
+            const batchSize = min(numLeft-i, ROWGROUPS);
+
+            var rg_writer = writer.AppendRowGroup();
+            for (data, kind) in zip(c_datas, c_types) {
+              if kind == ARROWINT64 || kind == ARROWUINT64 {
+                var col_writer = rg_writer.NextColumn();
+                col_writer.WriteBatch(data, nil, nil, batchSize);
+              } else if kind == ARROWSTRING {
+                var col_writer = rg_writer.NextColumn();
+                var def_level = 1;
+
+                var strs = data:c_ptrConst(string);
+                for i in 0..#batchSize {
+                  const ref str = strs[i];
+                  col_writer.WriteString(str.size, str.c_str(), c_ptrTo(def_level), nil);
+                }
+              }
+            }
+          }
+
+          writer.close();
         }
       }
     }
@@ -756,7 +829,7 @@ module Parquet {
   proc writeTable(filename, colNames, ref Arrs...) {
     var op = new pqWriteOp(filename, Arrs[0].domain);
 
-    for i in 0..<Arrs.size do op.registerColumn(Arrs[i], colNames[i]);
+    for param i in 0..<Arrs.size do op.registerColumn(Arrs[i], colNames[i]);
 
     op.write();
   }
