@@ -604,7 +604,7 @@ int closeFileWriter(void* wrapper, char** errMsg) {
   auto fileWriterWrapper = (FileWriterWrapper*) wrapper;
   fileWriterWrapper->fileWriter->Close();
   ARROWSTATUS_OK(fileWriterWrapper->outfile->Close());
-  //delete fileWriterWrapper;
+  delete fileWriterWrapper;
 
   return 0;
 }
