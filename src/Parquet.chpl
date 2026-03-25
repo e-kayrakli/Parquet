@@ -1,5 +1,6 @@
 module Parquet {
   use CTypes;
+  use BlockDist;
 
   enum CompressionType {
     NONE=0,
@@ -33,6 +34,48 @@ module Parquet {
   extern const ARROWDECIMAL: c_int;
   extern const ARROWERROR: c_int;
 
+  class FileWriter {
+    var _wrapper : c_ptr(void);
+
+    proc AppendRowGroup() {
+      extern proc c_appendRowGroup(wrapper): c_ptr(void);
+
+      return new RowGroupWriter(c_appendRowGroup(_wrapper));
+    }
+
+    proc close() {
+      extern proc closeFileWriter(wrapper, errMsg): c_int;
+      manage new parquetCall(getL(), getR(), getM()) as call {
+        call.retVal = closeFileWriter(_wrapper, call.errMsg);
+      }
+    }
+  }
+
+  class RowGroupWriter {
+    var _ptr : c_ptr(void);
+
+    proc NextColumn() {
+      extern proc c_nextColumn(ptr): c_ptr(void);
+
+      return new ColumnWriter(c_nextColumn(_ptr));
+    }
+  }
+
+  class ColumnWriter {
+    var _ptr : c_ptr(void);
+
+    proc WriteBatch(values, defLevels, repLevels, numValues) {
+      extern proc c_writeBatch(ptr, values, defLevels, repLevels, numValues): c_int;
+
+      c_writeBatch(_ptr, values, defLevels, repLevels, numValues);
+    }
+
+    proc WriteString(len, cstr, defLevels, repLevels) {
+      extern proc c_writeBatchString(ptr, len, cstr, defLevels, repLevels, numValues): c_int;
+
+      c_writeBatchString(_ptr, len, cstr, defLevels, repLevels, 1);
+    }
+  }
 
   private config const defaultBatchSize = 8192;
   config const ROWGROUPS = 512*1024*1024 / numBytes(int); // 512 mb of int64
@@ -57,7 +100,9 @@ module Parquet {
       when int(32) do return ARROWINT32;
       when uint(64) do return ARROWUINT64;
       when uint(32) do return ARROWUINT32;
+      when real do return ARROWDOUBLE;
       when bool do return ARROWBOOLEAN;
+      when string do return ARROWSTRING;
       otherwise do compilerError("Unsupported Chapel type: ", t:string);
     }
   }
@@ -455,7 +500,7 @@ module Parquet {
         const myFilename = filenames[idx];
 
         var locDom = A.localSubdomain();
-        var locArr = A[locDom];
+        var locArr = A[locDom]; // Engin: why are we doing this??
 
         numElemsPerFile[idx] = locDom.size;
 
@@ -667,6 +712,128 @@ module Parquet {
                                            call.errMsg);
     }
     if call.err then throw call.err;
+  }
+
+  record pqWriteLocalChunkInfo {
+    var c_colName: c_ptrConst(c_char);
+    var c_data: c_ptrConst(void);
+    var c_type: int;
+    var size: int;
+  }
+
+  record pqWriteOp {
+
+    var filenameBase: string;
+    var sharedDom: domain(?);
+
+    // per locale store for pqWriteLocalChunkInfo
+    var info = blockDist.createArray(sharedDom.targetLocales().domain,
+                                     list(pqWriteLocalChunkInfo),
+                                     targetLocales=sharedDom.targetLocales());
+
+    var colCount: int;
+
+    proc ref registerColumn(const A: [?colDom] ?eltType, colName: string) {
+      // TODO check domain alignment
+
+      coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
+        on loc {
+          const ref localSubDom = A.localSubdomain();
+
+          var ptr = c_pointer_return_const(A[localSubDom.first]);
+
+          localInfo.pushBack(
+              new pqWriteLocalChunkInfo(colName.localize().c_str(),
+                                        ptr,
+                                        chplTypeToCType(eltType),
+                                        localSubDom.size));
+        }
+      }
+
+      colCount += 1;
+    }
+
+    proc write() {
+      extern proc createFileWriter(filename, column_names,
+                                   objTypes, datatypes,
+                                   colnum,
+                                   compression,
+                                   writer,
+                                   errMsg): c_int;
+
+      coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
+        on loc {
+          assert(localInfo.size == colCount);
+
+          const colDom = {0..#colCount};
+
+          var c_colNames: [colDom] c_ptrConst(c_char);
+          var c_datas: [colDom] c_ptrConst(void);
+          var c_types: [colDom] int;
+          var c_objTypes: [colDom] int = 1;
+          var sizes: [colDom] int;
+
+          for (colInfo,   c_colName,  c_data,  c_type,  size) in
+           zip(localInfo, c_colNames, c_datas, c_types, sizes) {
+
+             c_colName = colInfo.c_colName;
+             c_data = colInfo.c_data;
+             c_type = colInfo.c_type;
+             size = colInfo.size;
+          }
+
+          const c_filename = filenameBase.localize().c_str();
+          var writer = new FileWriter();
+          manage new parquetCall(getL(), getR(), getM()) as call {
+            call.retVal = createFileWriter(c_filename,
+                                           c_ptrTo(c_colNames),
+                                           c_ptrTo(c_objTypes),
+                                           c_ptrTo(c_types),
+                                           colCount,
+                                           compression=0,
+                                           c_ptrTo(writer._wrapper),
+                                           call.errMsg);
+          }
+
+          var numLeft = sizes[0];
+
+          // TODO:
+          // - implement other data types
+          // - implement SEGARRAY?
+          for i in 0..#numLeft by ROWGROUPS {
+            const batchSize = min(numLeft-i, ROWGROUPS);
+
+            var rg_writer = writer.AppendRowGroup();
+            for (data, kind) in zip(c_datas, c_types) {
+              if kind == ARROWINT64 || kind == ARROWUINT64 ||
+                 kind == ARROWBOOLEAN || kind == ARROWDOUBLE {
+                var col_writer = rg_writer.NextColumn();
+                col_writer.WriteBatch(data, nil, nil, batchSize);
+              } else if kind == ARROWSTRING {
+                var col_writer = rg_writer.NextColumn();
+                var def_level = 1;
+
+                var strs = data:c_ptrConst(string);
+                for i in 0..#batchSize {
+                  const ref str = strs[i];
+                  col_writer.WriteString(str.size, str.c_str(), c_ptrTo(def_level), nil);
+                }
+              }
+            }
+          }
+
+          writer.close();
+        }
+      }
+    }
+  }
+
+  proc writeTable(filename, colNames, const Arrs...) {
+    var op = new pqWriteOp(filename, Arrs[0].domain);
+
+    for param i in 0..<Arrs.size do op.registerColumn(Arrs[i], colNames[i]);
+
+    op.write();
   }
 
   /* This is the Chapel array-based interface */
