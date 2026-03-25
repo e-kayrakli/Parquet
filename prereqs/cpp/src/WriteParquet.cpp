@@ -623,8 +623,8 @@ void c_writeBatch(void* ptr, void* ptr_arr, void* def_levels,
                    void* rep_levels, int64_t batchSize) {
   auto genericWriter = static_cast<parquet::ColumnWriter*>(ptr);
 
-#define CASE(EN, KIND, TYPE) \
-case parquet::Type::EN: \
+#define CASE(CAP, KIND, TYPE) \
+case parquet::Type::CAP: \
       static_cast<parquet::KIND##Writer*>(ptr)->WriteBatch(batchSize, \
         (int16_t*)def_levels, (int16_t*)rep_levels, \
         (TYPE*)ptr_arr); break;
