@@ -20,8 +20,8 @@ CXXFLAGS=-I$(INCDIR)
 
 # assumes spack-installed arrow
 # TODO error check: spack exists? arrow installed?
-ARROW_DIR=$(shell spack find --paths --no-groups arrow | cut -d\   -f3)
-CXXFLAGS+=-I$(ARROW_DIR)/include
+ARROW_DIR=$(shell spack find --format="{prefix}" arrow)
+CXXFLAGS+=-I$(ARROW_DIR)/include -std=c++17
 
 # also add the src directory to be able to include SharedEnums without
 # relative path. This path is relative to prereqs/cpp
@@ -45,4 +45,4 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(CHPL_CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
+	rm -rf $(OBJDIR)
