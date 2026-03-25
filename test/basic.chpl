@@ -32,6 +32,36 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
     readColumn(filePath, "Arr3", In);
     test.assertEqual(Arr3, In);
   }
+
+  manage new tempDir() as temp {
+    const doubleArr : [1..10] real = 42.0;
+    const boolArr : [1..10] bool = true;
+    const intArr : [1..10] int = 7;
+    const uintArr : [1..10] uint = 8;
+
+    const filePath = Path.joinPath(temp.path,
+                                   "variousTypes.parquet");
+
+    const names = ("DoubleArr", "BoolArr", "IntArr", "UintArr");
+    writeTable(filePath, colNames=names,
+                doubleArr, boolArr, intArr, uintArr);
+
+    var doubleIn: [1..10] real;
+    readColumn(filePath, "DoubleArr", doubleIn);
+    test.assertEqual(doubleArr, doubleIn);
+
+    var boolIn: [1..10] bool;
+    readColumn(filePath, "BoolArr", boolIn);
+    test.assertEqual(boolArr, boolIn);
+
+    var intIn: [1..10] int;
+    readColumn(filePath, "IntArr", intIn);
+    test.assertEqual(intArr, intIn);
+
+    var uintIn: [1..10] uint;
+    readColumn(filePath, "UintArr", uintIn);
+    test.assertEqual(uintArr, uintIn);
+  }
 }
 
 proc testDistributedWriteRead(test: borrowed Test) throws {
