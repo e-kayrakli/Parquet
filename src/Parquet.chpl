@@ -100,6 +100,7 @@ module Parquet {
       when int(32) do return ARROWINT32;
       when uint(64) do return ARROWUINT64;
       when uint(32) do return ARROWUINT32;
+      when real do return ARROWDOUBLE;
       when bool do return ARROWBOOLEAN;
       when string do return ARROWSTRING;
       otherwise do compilerError("Unsupported Chapel type: ", t:string);
@@ -732,14 +733,14 @@ module Parquet {
 
     var colCount: int;
 
-    proc ref registerColumn(A: [?colDom] ?eltType, colName: string) {
+    proc ref registerColumn(const A: [?colDom] ?eltType, colName: string) {
       // TODO check domain alignment
 
       coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
         on loc {
           const ref localSubDom = A.localSubdomain();
 
-          var ptr = c_pointer_return(A[localSubDom.first]);
+          var ptr = c_pointer_return_const(A[localSubDom.first]);
 
           localInfo.pushBack(
               new pqWriteLocalChunkInfo(colName.localize().c_str(),
@@ -804,7 +805,8 @@ module Parquet {
 
             var rg_writer = writer.AppendRowGroup();
             for (data, kind) in zip(c_datas, c_types) {
-              if kind == ARROWINT64 || kind == ARROWUINT64 {
+              if kind == ARROWINT64 || kind == ARROWUINT64 ||
+                 kind == ARROWBOOLEAN || kind == ARROWDOUBLE {
                 var col_writer = rg_writer.NextColumn();
                 col_writer.WriteBatch(data, nil, nil, batchSize);
               } else if kind == ARROWSTRING {
@@ -826,7 +828,7 @@ module Parquet {
     }
   }
 
-  proc writeTable(filename, colNames, ref Arrs...) {
+  proc writeTable(filename, colNames, const Arrs...) {
     var op = new pqWriteOp(filename, Arrs[0].domain);
 
     for param i in 0..<Arrs.size do op.registerColumn(Arrs[i], colNames[i]);
