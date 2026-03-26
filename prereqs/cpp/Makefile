@@ -16,12 +16,33 @@ CXX_HEADERS = $(wildcard $(INCDIR)/*.h)
 CXX_SOURCES = $(wildcard $(SRCDIR)/*.cpp)
 CXX_OBJECTS = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(CXX_SOURCES))
 
-CXXFLAGS=-I$(INCDIR)
+CXXFLAGS=-I$(INCDIR) -std=c++17
 
-# assumes spack-installed arrow
-# TODO error check: spack exists? arrow installed?
-ARROW_DIR=$(shell spack find --format="{prefix}" arrow)
-CXXFLAGS+=-I$(ARROW_DIR)/include -std=c++17
+# --- Arrow/Parquet dependency resolution ---
+# Priority: 1) ARROW_DIR env var, 2) pkg-config, 3) spack
+ifdef ARROW_DIR
+  # Support lib64 (RHEL/Fedora) falling back to lib
+  ARROW_LIBDIR := $(if $(wildcard $(ARROW_DIR)/lib64/libarrow.*),$(ARROW_DIR)/lib64,$(ARROW_DIR)/lib)
+  ARROW_CFLAGS := -I$(ARROW_DIR)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+else ifneq ($(shell pkg-config --exists arrow parquet 2>/dev/null && echo yes),)
+  ARROW_CFLAGS := $(shell pkg-config --cflags arrow parquet)
+  ARROW_LDFLAGS := $(shell pkg-config --libs arrow parquet)
+  ARROW_LIBDIR := $(shell pkg-config --variable=libdir arrow)
+else ifneq ($(shell command -v spack 2>/dev/null),)
+  _SPACK_ARROW_PREFIX := $(shell spack find --format="{prefix}" arrow 2>/dev/null)
+  ifneq ($(_SPACK_ARROW_PREFIX),)
+    ARROW_CFLAGS := -I$(_SPACK_ARROW_PREFIX)/include
+    ARROW_LDFLAGS := -L$(_SPACK_ARROW_PREFIX)/lib -larrow -lparquet
+    ARROW_LIBDIR := $(_SPACK_ARROW_PREFIX)/lib
+  endif
+endif
+
+ifeq ($(ARROW_CFLAGS),)
+  $(error Could not find Arrow/Parquet. Set ARROW_DIR, install pkg-config files, or use spack.)
+endif
+
+CXXFLAGS+=$(ARROW_CFLAGS)
 
 # also add the src directory to be able to include SharedEnums without
 # relative path. This path is relative to prereqs/cpp
@@ -34,7 +55,7 @@ all: $(CXX_OBJECTS)
 # Note -I./src is to be able to use SharedEnums.chpl. This path is relative to
 # the project root
 printchplflags:
-	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I./src/ --ldflags -Wl,-rpath --ldflags $(ARROW_DIR)/lib -L$(ARROW_DIR)/lib -larrow -lparquet)
+	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I./src/ --ldflags -Wl,-rpath --ldflags $(ARROW_LIBDIR) $(ARROW_LDFLAGS))
 
 # Rule to create object directory if it doesn't exist
 $(OBJDIR):
