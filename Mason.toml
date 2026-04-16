@@ -2,8 +2,8 @@
 [brick]
 name = "Parquet"
 type = "library"
-version = "0.0.1"
-chplVersion = "2.7.0..2.9.0"
+version = "0.1.0"
+chplVersion = "2.8.0"
 license = "None"
 source = "https://github.com/e-kayrakli/Parquet"
 
