@@ -53,7 +53,7 @@ CXXFLAGS+=$(ARROW_CFLAGS)
 
 # also add the src directory to be able to include SharedEnums without
 # relative path. This path is relative to prereqs/cpp
-CXXFLAGS+=-I../../src
+CXXFLAGS+=-I../../src/util
 
 .PHONY: all clean
 
@@ -62,7 +62,7 @@ all: $(CXX_OBJECTS)
 # Note -I./src is to be able to use SharedEnums.chpl. This path is relative to
 # the project root
 printchplflags:
-	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I./src/ --ldflags -Wl,-rpath --ldflags $(ARROW_LIBDIR) $(ARROW_LDFLAGS))
+	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I./src/util/ --ldflags -Wl,-rpath --ldflags $(ARROW_LIBDIR) $(ARROW_LDFLAGS))
 
 # Rule to create object directory if it doesn't exist
 $(OBJDIR):
