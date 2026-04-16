@@ -5,6 +5,7 @@ type = "library"
 version = "0.1.0"
 chplVersion = "2.8.0"
 license = "None"
+authors = ["Engin Kayraklioglu", "Shreyas Khandekar", "Ben Harshbarger"]
 source = "https://github.com/e-kayrakli/Parquet"
 
 [dependencies]
