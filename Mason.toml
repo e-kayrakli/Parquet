@@ -4,7 +4,7 @@ name = "Parquet"
 type = "library"
 version = "0.1.0"
 chplVersion = "2.8.0"
-license = "None"
+license = "Apache-2.0"
 authors = ["Engin Kayraklioglu", "Shreyas Khandekar", "Ben Harshbarger"]
 source = "https://github.com/e-kayrakli/Parquet"
 
