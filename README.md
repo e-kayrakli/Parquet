@@ -1,0 +1,113 @@
+# Parquet
+
+A [Chapel](https://chapel-lang.org/) library for reading and writing
+[Apache Parquet](https://parquet.apache.org/) files. It wraps the Apache Arrow
+C++ Parquet implementation and exposes a Chapel-friendly API that works with
+both local and distributed (Block-distributed) arrays.
+
+## Features
+
+- Read and write Parquet columns by name
+- Multi-column table writes via `writeTable`
+- Distributed array I/O with automatic per-locale file partitioning
+- Supported Chapel types: `int(32)`, `int(64)`, `uint(32)`, `uint(64)`,
+  `real`, `bool`, `string`
+- Compression support: None, Snappy, Gzip, Brotli, Zstd, LZ4
+- Append and truncate write modes
+
+## Requirements
+
+- Chapel 2.8.0 or later
+- Apache Arrow and Parquet C++ libraries (19.0.1 or compatible)
+
+The C++ prerequisite libraries are resolved automatically through one of the
+following (checked in order):
+
+1. The `ARROW_DIR` environment variable
+2. `pkg-config`
+3. [Spack](https://spack.io/)
+
+## Installation
+
+Add Parquet as a Mason dependency:
+
+```bash
+mason add Parquet@0.1.1
+```
+
+## Usage
+
+### Writing a single column
+
+```chapel
+use Parquet;
+
+var Arr: [1..100] int = 42;
+
+writeColumn(filename="data.parquet", colName="values", Arr=Arr);
+```
+
+### Reading a single column
+
+```chapel
+use Parquet;
+
+var Arr: [1..100] int;
+
+readColumn(filename="data.parquet", colName="values", Arr=Arr);
+```
+
+### Writing a multi-column table
+
+```chapel
+use Parquet;
+
+var col1: [1..10] int = 1;
+var col2: [1..10] real = 3.14;
+var col3: [1..10] bool = true;
+
+writeTable("table.parquet",
+           colNames=("col1", "col2", "col3"),
+           col1, col2, col3);
+```
+
+### Writing distributed arrays
+
+```chapel
+use Parquet;
+import BlockDist.blockDist;
+
+var A = blockDist.createArray(1..1000, int);
+A = 7;
+
+write1DDistArrayParquet("distributed.parquet", "values",
+                        CompressionType.SNAPPY, TRUNCATE, A);
+```
+
+### Inspecting file metadata
+
+```chapel
+use Parquet;
+
+const numCols = getNumCols("data.parquet");
+const types   = getAllTypes("data.parquet");
+
+for name in datasets("data.parquet") do
+  writeln(name);
+```
+
+## Running Tests
+
+```bash
+mason test
+```
+
+## Authors
+
+- Engin Kayraklioglu
+- Shreyas Khandekar
+- Ben Harshbarger
+
+## License
+
+See [Mason.toml](Mason.toml).
