@@ -17,6 +17,9 @@ CXX_SOURCES = $(wildcard $(SRCDIR)/*.cpp)
 CXX_OBJECTS = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(CXX_SOURCES))
 
 CXXFLAGS=-I$(INCDIR) -std=c++17
+# Build prereq objects as PIC so they can be linked into PIE executables.
+# Override at invocation time if needed (e.g., PIC_CXXFLAGS="").
+PIC_CXXFLAGS ?= -fPIC
 
 # --- Arrow/Parquet dependency resolution ---
 # Priority: 1) ARROW_DIR env var, 2) pkg-config, 3) spack
@@ -50,6 +53,7 @@ ifeq ($(ARROW_LIBDIR),)
 endif
 
 CXXFLAGS+=$(ARROW_CFLAGS)
+CXXFLAGS+=$(PIC_CXXFLAGS)
 
 # also add the src directory to be able to include SharedEnums without
 # relative path. This path is relative to prereqs/cpp
