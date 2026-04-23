@@ -1,3 +1,4 @@
+// Copyright Hewlett Packard Enterprise Development LP.
 #ifndef READ_PARQUET_H
 #define READ_PARQUET_H
 

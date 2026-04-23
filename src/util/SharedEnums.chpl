@@ -1,3 +1,4 @@
+/* Copyright Hewlett Packard Enterprise Development LP. */
 /* WARNING: this file is included in C++ code as if it is a regular C header. So
  * even though it has chpl extension, the syntax has to be legal both in Chapel
  * and C++ and the contents should be limited to enum definitions shared between

@@ -1,3 +1,4 @@
+// Copyright Hewlett Packard Enterprise Development LP.
 module TestUtil {
   import FileSystem as FS;
   import Time;

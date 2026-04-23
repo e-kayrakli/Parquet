@@ -1,3 +1,4 @@
+// Copyright Hewlett Packard Enterprise Development LP.
 #ifndef UTIL_PARQUET_H
 #define UTIL_PARQUET_H
 
