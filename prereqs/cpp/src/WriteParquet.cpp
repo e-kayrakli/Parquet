@@ -1,3 +1,4 @@
+// Copyright Hewlett Packard Enterprise Development LP.
 #include "WriteParquet.h"
 #include "UtilParquet.h"
 

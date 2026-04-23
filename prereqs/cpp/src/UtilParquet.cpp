@@ -1,3 +1,4 @@
+// Copyright Hewlett Packard Enterprise Development LP.
 #include "UtilParquet.h"
 
   /*
