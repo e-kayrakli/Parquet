@@ -84,18 +84,6 @@ write1DDistArrayParquet("distributed.parquet", "values",
                         CompressionType.SNAPPY, TRUNCATE, A);
 ```
 
-### Inspecting file metadata
-
-```chapel
-use Parquet;
-
-const numCols = getNumCols("data.parquet");
-const types   = getAllTypes("data.parquet");
-
-for name in datasets("data.parquet") do
-  writeln(name);
-```
-
 ## Running Tests
 
 ```bash
