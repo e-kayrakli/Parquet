@@ -1,12 +1,13 @@
 
 [brick]
 name = "Parquet"
-type = "library"
 version = "0.1.0"
-chplVersion = "2.8.0"
-license = "Apache-2.0"
-authors = ["Engin Kayraklioglu", "Shreyas Khandekar", "Ben Harshbarger"]
+type = "library"
+chplVersion = "2.8.0..2.9.0"
 source = "https://github.com/e-kayrakli/Parquet"
+authors = ["Engin Kayraklioglu", "Shreyas Khandekar", "Ben Harshbarger"]
+license = "Apache-2.0"
+copyrightYear = "2026"
 
 [dependencies]
 
