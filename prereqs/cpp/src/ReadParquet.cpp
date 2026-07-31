@@ -155,6 +155,93 @@ int64_t ColReadOp::read<arrow::UInt32Type>() {
   return _readShortIntegral<TypeBundle<arrow::UInt32Type>>();
 }
 
+int64_t ColReadOp::readUInt8() {
+  auto chpl_ptr = (uint8_t*)chpl_arr;
+  auto reader = static_cast<parquet::Int32Reader*>(column_reader.get());
+  *startIdx -= reader->Skip(*startIdx);
+
+  int64_t values_read = 0;
+  int64_t num_read = 0;
+  if (nullMode == noNulls || nullMode == onlyFloats) {
+    std::vector<int32_t> values(batchSize);
+    while (reader->HasNext() && row_idx < numElems) {
+      if ((numElems - row_idx) < batchSize)
+        batchSize = numElems - row_idx;
+      std::ignore = reader->ReadBatch(batchSize, nullptr, nullptr,
+                                      values.data(), &values_read);
+      for (int64_t j = 0; j < values_read; j++) {
+        if (values[j] < 0 || values[j] > 255)
+          throw std::range_error("UINT_8 value is outside [0, 255]");
+        chpl_ptr[row_idx+j] = static_cast<uint8_t>(values[j]);
+      }
+      row_idx += values_read;
+      num_read += values_read;
+    }
+  }
+  else {
+    int32_t value;
+    int16_t definition_level;
+    while (reader->HasNext() && row_idx < numElems) {
+      std::ignore = reader->ReadBatch(1, &definition_level, nullptr, &value,
+                                      &values_read);
+      if (values_read == 0) {
+        where_null_chpl[row_idx] = true;
+      }
+      else {
+        if (value < 0 || value > 255)
+          throw std::range_error("UINT_8 value is outside [0, 255]");
+        chpl_ptr[row_idx] = static_cast<uint8_t>(value);
+      }
+      row_idx++;
+      num_read++;
+    }
+  }
+  return num_read;
+}
+
+template<>
+int64_t ColReadOp::read<parquet::Int96Type>() {
+  auto chpl_ptr = (int64_t*)chpl_arr;
+  auto reader = static_cast<parquet::Int96Reader*>(column_reader.get());
+  *startIdx -= reader->Skip(*startIdx);
+
+  int64_t values_read = 0;
+  int64_t num_read = 0;
+
+  if (nullMode == noNulls || nullMode == onlyFloats) {
+    std::vector<parquet::Int96> tmpArr(batchSize);
+    while (reader->HasNext() && row_idx < numElems) {
+      if ((numElems - row_idx) < batchSize) {
+        batchSize = numElems - row_idx;
+      }
+      std::ignore = reader->ReadBatch(batchSize, nullptr, nullptr,
+                                      tmpArr.data(), &values_read);
+      for (int64_t j = 0; j < values_read; j++) {
+        chpl_ptr[row_idx+j] = parquet::Int96GetNanoSeconds(tmpArr[j]);
+      }
+      row_idx += values_read;
+      num_read += values_read;
+    }
+  }
+  else {
+    parquet::Int96 tmp;
+    int16_t definition_level;
+    while (reader->HasNext() && row_idx < numElems) {
+      std::ignore = reader->ReadBatch(1, &definition_level, nullptr, &tmp,
+                                      &values_read);
+      if (values_read == 0) {
+        where_null_chpl[row_idx] = true;
+      }
+      else {
+        chpl_ptr[row_idx] = parquet::Int96GetNanoSeconds(tmp);
+      }
+      row_idx++;
+      num_read++;
+    }
+  }
+  return num_read;
+}
+
 template<>
 int64_t ColReadOp::read<arrow::FloatType>() {
   using Types = TypeBundle<arrow::FloatType>;
@@ -301,7 +388,7 @@ int64_t ColReadOp::read<arrow::Decimal128Type>() {
 
 
 int readAllCols(const char* filename, void** chpl_arrs, int* types,
-                bool* where_null_chpl, int64_t numElems, int64_t startIdx,
+                bool** where_null_chpl, int64_t numElems, int64_t startIdx,
                 int64_t batchSize,
                 chplEnum_t nullMode, char** errMsg) {
   try {
@@ -339,6 +426,9 @@ int readAllCols(const char* filename, void** chpl_arrs, int* types,
           file_metadata->schema()->Column(col_idx);
 
         void* chpl_arr = chpl_arrs[col_idx];
+        bool* col_where_null = nullMode == all
+               ? where_null_chpl[col_idx]
+               : nullptr;
 
         // TODO, I want values of this type to be created per read operation,
         // not per column, per rowgroup
@@ -352,18 +442,23 @@ int readAllCols(const char* filename, void** chpl_arrs, int* types,
                               row_idx,
                               numElems,
                               batchSize,
-                              where_null_chpl,
+                              col_where_null,
                               col_info };
 
         int64_t nread;
         switch (types[col_idx]) {
           case ARROWFLOAT:   nread = op.read<arrow::FloatType>();      break;
           case ARROWDOUBLE:  nread = op.read<arrow::DoubleType>();     break;
-          case ARROWINT64:   nread = op.read<arrow::Int64Type>();      break;
+          case ARROWINT64:
+            nread = col_info->physical_type() == parquet::Type::INT96
+                      ? op.read<parquet::Int96Type>()
+                      : op.read<arrow::Int64Type>();
+            break;
           case ARROWUINT64:  nread = op.read<arrow::UInt64Type>();     break;
           case ARROWBOOLEAN: nread = op.read<arrow::BooleanType>();    break;
           case ARROWINT32:   nread = op.read<arrow::Int32Type>();      break;
           case ARROWUINT32:  nread = op.read<arrow::UInt32Type>();     break;
+          case ARROWUINT8:   nread = op.readUInt8();                   break;
           case ARROWDECIMAL: nread = op.read<arrow::Decimal128Type>(); break;
           default:
             // TODO we might want to have our own exception types on C++ side,
@@ -428,6 +523,97 @@ int64_t readColumn(void* chpl_arr, int64_t *startIdx, std::shared_ptr<parquet::C
       // if values_read is 0, that means that it was a null value
       if(values_read == 0) {
         where_null_chpl[i] = true;
+      }
+      i++;
+      num_read++;
+    }
+  }
+  return num_read;
+}
+
+int64_t readColumnInt96(void* chpl_arr, int64_t *startIdx,
+                        std::shared_ptr<parquet::ColumnReader> column_reader,
+                        bool hasNonFloatNulls, int64_t i, int64_t numElems,
+                        int64_t batchSize, int64_t values_read,
+                        bool* where_null_chpl) {
+  auto chpl_ptr = (int64_t*)chpl_arr;
+  auto reader = static_cast<parquet::Int96Reader*>(column_reader.get());
+  *startIdx -= reader->Skip(*startIdx);
+
+  int64_t num_read = 0;
+  if (not hasNonFloatNulls) {
+    std::vector<parquet::Int96> tmpArr(batchSize);
+    while (reader->HasNext() && i < numElems) {
+      if ((numElems - i) < batchSize) {
+        batchSize = numElems - i;
+      }
+      (void)reader->ReadBatch(batchSize, nullptr, nullptr, tmpArr.data(),
+                              &values_read);
+      for (int64_t j = 0; j < values_read; j++) {
+        chpl_ptr[i+j] = parquet::Int96GetNanoSeconds(tmpArr[j]);
+      }
+      i += values_read;
+      num_read += values_read;
+    }
+  }
+  else {
+    parquet::Int96 tmp;
+    int16_t definition_level;
+    while (reader->HasNext() && i < numElems) {
+      (void)reader->ReadBatch(1, &definition_level, nullptr, &tmp,
+                              &values_read);
+      if (values_read == 0) {
+        where_null_chpl[i] = true;
+      }
+      else {
+        chpl_ptr[i] = parquet::Int96GetNanoSeconds(tmp);
+      }
+      i++;
+      num_read++;
+    }
+  }
+  return num_read;
+}
+
+int64_t readColumnUInt8(void* chpl_arr, int64_t *startIdx,
+                        std::shared_ptr<parquet::ColumnReader> column_reader,
+                        bool hasNonFloatNulls, int64_t i, int64_t numElems,
+                        int64_t batchSize, int64_t values_read,
+                        bool* where_null_chpl) {
+  auto chpl_ptr = (uint8_t*)chpl_arr;
+  auto reader = static_cast<parquet::Int32Reader*>(column_reader.get());
+  *startIdx -= reader->Skip(*startIdx);
+
+  int64_t num_read = 0;
+  if (not hasNonFloatNulls) {
+    std::vector<int32_t> values(batchSize);
+    while (reader->HasNext() && i < numElems) {
+      if ((numElems - i) < batchSize)
+        batchSize = numElems - i;
+      (void)reader->ReadBatch(batchSize, nullptr, nullptr, values.data(),
+                              &values_read);
+      for (int64_t j = 0; j < values_read; j++) {
+        if (values[j] < 0 || values[j] > 255)
+          throw std::range_error("UINT_8 value is outside [0, 255]");
+        chpl_ptr[i+j] = static_cast<uint8_t>(values[j]);
+      }
+      i += values_read;
+      num_read += values_read;
+    }
+  }
+  else {
+    int32_t value;
+    int16_t definition_level;
+    while (reader->HasNext() && i < numElems) {
+      (void)reader->ReadBatch(1, &definition_level, nullptr, &value,
+                              &values_read);
+      if (values_read == 0) {
+        where_null_chpl[i] = true;
+      }
+      else {
+        if (value < 0 || value > 255)
+          throw std::range_error("UINT_8 value is outside [0, 255]");
+        chpl_ptr[i] = static_cast<uint8_t>(value);
       }
       i++;
       num_read++;
@@ -612,22 +798,31 @@ int cpp_readColumnByName(const char* filename, void* chpl_arr, bool* where_null_
         *errMsg = strdup(msg.c_str());
         return ARROWERROR;
       }
-      auto max_def = file_metadata -> schema() -> Column(idx) -> max_definition_level(); // needed to determine if nulls are allowed
+      const auto* col_info = file_metadata -> schema() -> Column(idx);
+      auto max_def = col_info -> max_definition_level(); // needed to determine if nulls are allowed
       
       column_reader = row_group_reader->Column(idx);
 
       // Since int64 and uint64 Arrow dtypes share a physical type and only differ
       // in logical type, they must be read from the file in the same way
       if(ty == ARROWINT64 || ty == ARROWUINT64) {
-        i += readColumn<parquet::Int64Reader, int64_t>(chpl_arr,
-                                                       &startIdx,
-                                                       column_reader,
-                                                       hasNonFloatNulls,
-                                                       i,
-                                                       numElems,
-                                                       batchSize,
-                                                       values_read,
-                                                       where_null_chpl);
+        if (ty == ARROWINT64 &&
+            col_info->physical_type() == parquet::Type::INT96) {
+          i += readColumnInt96(chpl_arr, &startIdx, column_reader,
+                               hasNonFloatNulls, i, numElems, batchSize,
+                               values_read, where_null_chpl);
+        }
+        else {
+          i += readColumn<parquet::Int64Reader, int64_t>(chpl_arr,
+                                                         &startIdx,
+                                                         column_reader,
+                                                         hasNonFloatNulls,
+                                                         i,
+                                                         numElems,
+                                                         batchSize,
+                                                         values_read,
+                                                         where_null_chpl);
+        }
       } else if(ty == ARROWINT32) {
         i += 
           readColumnIrregularBitWidth<parquet::Int32Reader, int64_t, int32_t>(
@@ -638,6 +833,10 @@ int cpp_readColumnByName(const char* filename, void* chpl_arr, bool* where_null_
           readColumnIrregularBitWidth<parquet::Int32Reader, uint64_t, uint32_t>(
               chpl_arr, &startIdx, column_reader, hasNonFloatNulls, i,
               numElems, batchSize, values_read, where_null_chpl);
+      } else if(ty == ARROWUINT8) {
+        i += readColumnUInt8(chpl_arr, &startIdx, column_reader,
+                             hasNonFloatNulls, i, numElems, batchSize,
+                             values_read, where_null_chpl);
       } else if(ty == ARROWBOOLEAN) {
         i += readColumn<parquet::BoolReader, bool>(chpl_arr, &startIdx, column_reader, hasNonFloatNulls, i,
                                               numElems, batchSize, values_read, where_null_chpl);
@@ -748,6 +947,24 @@ int cpp_readListColumnByName(const char* filename, void* chpl_arr, const char* c
             // if values_read is 0, that means that it was an empty seg
             if (values_read != 0) {
               chpl_ptr[arrayIdx] = (int64_t)tmp;
+              arrayIdx++;
+            }
+            i++;
+          }
+        } else if(lty == ARROWUINT8) {
+          auto chpl_ptr = (uint8_t*)chpl_arr;
+          parquet::Int32Reader* reader =
+            static_cast<parquet::Int32Reader*>(column_reader.get());
+          startIdx -= reader->Skip(startIdx);
+
+          int32_t value;
+          while (reader->HasNext() && arrayIdx < numElems) {
+            (void)reader->ReadBatch(1, &definition_level, nullptr, &value,
+                                    &values_read);
+            if (values_read != 0) {
+              if (value < 0 || value > 255)
+                throw std::range_error("UINT_8 value is outside [0, 255]");
+              chpl_ptr[arrayIdx] = static_cast<uint8_t>(value);
               arrayIdx++;
             }
             i++;
@@ -1057,7 +1274,8 @@ int64_t cpp_getListColumnSize(const char* filename, const char* colname, void* c
               seg_sizes[i] = seg_size;
             }
           }
-        } else if(lty == ARROWINT32 || lty == ARROWUINT32) {
+        } else if(lty == ARROWINT32 || lty == ARROWUINT32 ||
+            lty == ARROWUINT8) {
           parquet::Int32Reader* int_reader =
             static_cast<parquet::Int32Reader*>(column_reader.get());
 
@@ -1190,7 +1408,7 @@ extern "C" {
   }
   
   int c_readAllCols(const char* filename, void** chpl_arrs, int* types,
-                         bool* where_null_chpl, int64_t numElems,
+                         bool** where_null_chpl, int64_t numElems,
                          int64_t startIdx, int64_t batchSize,
                          chplEnum_t nullMode, char** errMsg) {
     return akcpp::readAllCols(filename, chpl_arrs, types, where_null_chpl,

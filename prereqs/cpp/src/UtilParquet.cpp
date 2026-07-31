@@ -143,6 +143,8 @@ static int getTypeOfFieldAtIdx(std::shared_ptr<arrow::Schema> sc,
     return ARROWINT32; // int16 is logical type, stored as int32
   else if(myType->id() == arrow::Type::UINT64)
     return ARROWUINT64;
+  else if(myType->id() == arrow::Type::UINT8)
+    return ARROWUINT8;
   else if(myType->id() == arrow::Type::UINT32 ||
           myType->id() == arrow::Type::UINT16)
     return ARROWUINT32; // uint16 is logical type, stored as uint32
@@ -229,6 +231,8 @@ int cpp_getType(const char* filename, const char* colname, char** errMsg) {
       return ARROWINT32; // int16 is logical type, stored as int32
     else if(myType->id() == arrow::Type::UINT64)
       return ARROWUINT64;
+    else if(myType->id() == arrow::Type::UINT8)
+      return ARROWUINT8;
     else if(myType->id() == arrow::Type::UINT32 || 
             myType->id() == arrow::Type::UINT16)
       return ARROWUINT32; // uint16 is logical type, stored as uint32
@@ -308,6 +312,8 @@ int cpp_getListType(const char* filename, const char* colname, char** errMsg) {
           return ARROWINT32;
         else if(f_type->id() == arrow::Type::UINT64)
           return ARROWUINT64;
+        else if(f_type->id() == arrow::Type::UINT8)
+          return ARROWUINT8;
         else if(f_type->id() == arrow::Type::UINT32 || f_type->id() == arrow::Type::UINT16)
           return ARROWUINT32;
         else if(f_type->id() == arrow::Type::TIMESTAMP)
@@ -420,6 +426,14 @@ std::shared_ptr<parquet::schema::GroupNode> SetupSchema(void* column_names, void
       } else {
         fields.push_back(parquet::schema::PrimitiveNode::Make(cname_ptr[i], parquet::Repetition::REQUIRED, parquet::Type::INT64, parquet::ConvertedType::UINT_64));
       }
+    } else if(dtypes_ptr[i] == ARROWUINT8) {
+      if (objType_ptr[i] == SEGARRAY){
+        auto element = parquet::schema::PrimitiveNode::Make("item", parquet::Repetition::OPTIONAL, parquet::Type::INT32, parquet::ConvertedType::UINT_8);
+        auto list = parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
+        fields.push_back(parquet::schema::GroupNode::Make(cname_ptr[i], parquet::Repetition::OPTIONAL, {list}, parquet::ConvertedType::LIST));
+      } else {
+        fields.push_back(parquet::schema::PrimitiveNode::Make(cname_ptr[i], parquet::Repetition::REQUIRED, parquet::Type::INT32, parquet::ConvertedType::UINT_8));
+      }
     } else if(dtypes_ptr[i] == ARROWBOOLEAN) {
       if (objType_ptr[i] == SEGARRAY){
         auto element = parquet::schema::PrimitiveNode::Make("item", parquet::Repetition::OPTIONAL, parquet::Type::BOOLEAN, parquet::ConvertedType::NONE);
@@ -465,6 +479,11 @@ int cpp_createEmptyListParquetFile(const char* filename, const char* dsetname, i
     }
     else if (dtype == ARROWUINT64) {
       auto element = parquet::schema::PrimitiveNode::Make("item", parquet::Repetition::OPTIONAL, parquet::Type::INT64, parquet::ConvertedType::UINT_64);
+      auto list = parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
+      fields.push_back(parquet::schema::GroupNode::Make(dsetname, parquet::Repetition::OPTIONAL, {list}, parquet::ConvertedType::LIST));
+    }
+    else if (dtype == ARROWUINT8) {
+      auto element = parquet::schema::PrimitiveNode::Make("item", parquet::Repetition::OPTIONAL, parquet::Type::INT32, parquet::ConvertedType::UINT_8);
       auto list = parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
       fields.push_back(parquet::schema::GroupNode::Make(dsetname, parquet::Repetition::OPTIONAL, {list}, parquet::ConvertedType::LIST));
     }
@@ -520,6 +539,8 @@ int cpp_createEmptyParquetFile(const char* filename, const char* dsetname, int64
       fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::INT64, parquet::ConvertedType::NONE));
     else if(dtype == ARROWUINT64)
       fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::INT64, parquet::ConvertedType::UINT_64));
+    else if(dtype == ARROWUINT8)
+      fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::INT32, parquet::ConvertedType::UINT_8));
     else if(dtype == ARROWBOOLEAN)
       fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::BOOLEAN, parquet::ConvertedType::NONE));
     else if(dtype == ARROWDOUBLE)
@@ -601,6 +622,12 @@ int cpp_appendColumnToParquet(const char* filename, void* chpl_arr,
       auto chpl_ptr = (uint64_t*)chpl_arr;
       ARROWSTATUS_OK(builder.AppendValues(chpl_ptr, numelems, nullptr))
       ARROWSTATUS_OK(builder.Finish(&values));
+    } else if(dtype == ARROWUINT8) {
+      chunk_type = arrow::uint8();
+      arrow::UInt8Builder builder;
+      auto chpl_ptr = (uint8_t*)chpl_arr;
+      ARROWSTATUS_OK(builder.AppendValues(chpl_ptr, numelems, nullptr))
+      ARROWSTATUS_OK(builder.Finish(&values));
     } else if(dtype == ARROWBOOLEAN) {
       chunk_type = arrow::boolean();
       arrow::BooleanBuilder builder;
@@ -666,6 +693,10 @@ int cpp_appendColumnToParquet(const char* filename, void* chpl_arr,
   }
 }
 
+const char* cpp_getVersionInfo(void) {
+  return strdup(arrow::GetBuildInfo().version_string.c_str());
+}
+
 int cpp_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg) {
   try {
     std::shared_ptr<arrow::io::ReadableFile> infile;
@@ -691,6 +722,7 @@ int cpp_getDatasetNames(const char* filename, char** dsetResult, bool readNested
          sc->field(i)->type()->id() == arrow::Type::INT32 ||
          sc->field(i)->type()->id() == arrow::Type::INT16 ||
          sc->field(i)->type()->id() == arrow::Type::UINT64 ||
+         sc->field(i)->type()->id() == arrow::Type::UINT8 ||
          sc->field(i)->type()->id() == arrow::Type::UINT32 ||
          sc->field(i)->type()->id() == arrow::Type::UINT16 ||
          sc->field(i)->type()->id() == arrow::Type::TIMESTAMP ||
@@ -852,6 +884,10 @@ extern "C" {
 
   int64_t c_getStringColumnNullIndices(const char* filename, const char* colname, void* chpl_nulls, char** errMsg) {
     return cpp_getStringColumnNullIndices(filename, colname, chpl_nulls, errMsg);
+  }
+
+  const char* c_getVersionInfo(void) {
+    return cpp_getVersionInfo();
   }
 
   int c_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg) {

@@ -40,6 +40,7 @@ extern "C" {
 #define ARROWSTRING 6
 #define ARROWLIST 8
 #define ARROWDECIMAL 9
+#define ARROWUINT8 10
 #define ARROWERROR -1
 
 #define ARRAYVIEW 0 // not currently used, but included for continuity with Chapel
@@ -140,6 +141,9 @@ extern "C" {
 
   int c_getPrecision(const char* filename, const char* colname, char** errMsg);
   int cpp_getPrecision(const char* filename, const char* colname, char** errMsg);
+
+  const char* c_getVersionInfo(void);
+  const char* cpp_getVersionInfo(void);
     
   int c_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg);
   int cpp_getDatasetNames(const char* filename, char** dsetResult, bool readNested, char** errMsg);
