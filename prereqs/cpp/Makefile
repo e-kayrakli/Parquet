@@ -46,10 +46,10 @@ CXXFLAGS+=-I../../src/util
 
 all: $(CXX_OBJECTS)
 
-# Note -I./src is to be able to use SharedEnums.chpl. This path is relative to
-# the project root
+# Add the package's src/util directory so SharedEnums.chpl can be found from
+# any caller working directory.
 printchplflags:
-	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I./src/util/ --ldflags -Wl,-rpath --ldflags $(ARROW_LIBDIR) $(ARROW_LDFLAGS))
+	@$(info $(CXX_HEADERS) $(CXX_OBJECTS) -I$(abspath $(MKFILE_DIR)/../../src/util) --ldflags -Wl,-rpath --ldflags $(ARROW_LIBDIR) $(ARROW_LDFLAGS))
 
 # Rule to create object directory if it doesn't exist
 $(OBJDIR):
