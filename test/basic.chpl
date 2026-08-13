@@ -22,6 +22,7 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
   Arr1 = 1;
   Arr2 = 2;
   Arr3 = 3;
+  
   var In: [1..10] int;
 
   manage new tempDir() as temp {
@@ -190,7 +191,7 @@ proc testMultiColWithStrListColumn(test: borrowed Test) throws {
 
   var segments = blockDist.createArray(0..#3, int);   // per-list start string
   var offsets = blockDist.createArray(0..#3, int);    // per-string start byte
-  var vals = blockDist.createArray(0..#9, uint(8)); // null-terminated bytes
+  var vals = blockDist.createArray(0..#9, uint(8));   // null-terminated bytes
   segments = [0, 2, 3];
   offsets = [0, 2, 5];
   // "a\0" "bb\0" "ccc\0"
