@@ -558,8 +558,8 @@ module Parquet {
     var call = new parquetCall(getL(), getR(), getM());
     manage call {
       call.retVal = c_getListType(filename.localize().c_str(),
-                               dsetname.localize().c_str(),
-                               call.errMsg);
+                                  dsetname.localize().c_str(),
+                                  call.errMsg);
 
       if call.retVal == ARROWLIST {
         throw new ParquetError("List element types cannot be list");
@@ -1249,7 +1249,7 @@ module Parquet {
        per list into `values`, and `values` holds the concatenated list
        elements. The list column is written as a nested Arrow LIST column,
        matching the layout produced by `writeListColumn`. Supported value types
-      are int(64), uint(64), real, and bool; string lists use
+       are int(64), uint(64), real, and bool; string lists use
        `registerStrListColumn`.
     */
     proc ref registerListColumn(const segments: [] int,
