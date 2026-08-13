@@ -51,7 +51,7 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
 
     const names = ("DoubleArr", "BoolArr", "IntArr", "UintArr");
     writeTable(filePath, colNames=names,
-          doubleArr, boolArr, intArr, uintArr);
+               doubleArr, boolArr, intArr, uintArr);
 
     var doubleIn: [1..10] real;
     readColumn(filePath, "DoubleArr", doubleIn);
