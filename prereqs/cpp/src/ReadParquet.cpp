@@ -623,14 +623,14 @@ int cpp_readColumnByName(const char* filename, void* chpl_arr, bool* where_null_
       // in logical type, they must be read from the file in the same way
       if(ty == ARROWINT64 || ty == ARROWUINT64) {
         i += readColumn<parquet::Int64Reader, int64_t>(chpl_arr,
-                                                        &startIdx,
-                                                        column_reader,
-                                                        hasNonFloatNulls,
-                                                        i,
-                                                        numElems,
-                                                        batchSize,
-                                                        values_read,
-                                                        where_null_chpl);
+                                                       &startIdx,
+                                                       column_reader,
+                                                       hasNonFloatNulls,
+                                                       i,
+                                                       numElems,
+                                                       batchSize,
+                                                       values_read,
+                                                       where_null_chpl);
       } else if(ty == ARROWINT32) {
         i += 
           readColumnIrregularBitWidth<parquet::Int32Reader, int64_t, int32_t>(
