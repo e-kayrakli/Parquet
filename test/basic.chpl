@@ -22,7 +22,7 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
   Arr1 = 1;
   Arr2 = 2;
   Arr3 = 3;
-  
+
   var In: [1..10] int;
 
   manage new tempDir() as temp {
