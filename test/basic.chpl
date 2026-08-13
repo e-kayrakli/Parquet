@@ -73,11 +73,11 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
 proc testMultiColEmptyStringIsNotNull(test: borrowed Test) throws {
   var ints = blockDist.createArray(0..#3, int);
   var offsets = blockDist.createArray(0..#3, int);
-  var values = blockDist.createArray(0..#6, int);
+  var values = blockDist.createArray(0..#6, uint(8));
   ints = [1, 2, 3];
   offsets = [0, 2, 3];
-  values = ["a".toByte(), 0, 0,
-            "b".toByte(), "b".toByte(), 0];
+  values = ["a".toByte(), 0:uint(8), 0:uint(8),
+            "b".toByte(), "b".toByte(), 0:uint(8)];
 
   manage new tempDir() as temp {
     const filePath = Path.joinPath(temp.path, "emptyString.parquet");

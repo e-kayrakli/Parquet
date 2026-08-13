@@ -1197,7 +1197,7 @@ module Parquet {
     }
 
     proc ref registerStrColumn(const offsets: [] int,
-                               const ref values: [] int,
+                               const ref values: [] uint(8),
                                colName: string) {
       coforall (loc, localInfo, localBufs) in
           zip(sharedDom.targetLocales(), info, buffers) {
