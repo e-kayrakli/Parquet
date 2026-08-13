@@ -27,7 +27,6 @@ module Parquet {
   extern const ARROWINT32: c_int;
   extern const ARROWUINT64: c_int;
   extern const ARROWUINT32: c_int;
-  extern const ARROWUINT8: c_int;
   extern const ARROWBOOLEAN: c_int;
   extern const ARROWFLOAT: c_int;
   extern const ARROWSTRING: c_int;
@@ -96,7 +95,7 @@ module Parquet {
     }
   }
 
-  enum ArrowTypes { int64, int32, uint64, uint32, uint8,
+  enum ArrowTypes { int64, int32, uint64, uint32,
                     stringArr, timestamp, boolean,
                     double, float, list, decimal,
                     notimplemented };
@@ -107,7 +106,6 @@ module Parquet {
       when int(32) do return ARROWINT32;
       when uint(64) do return ARROWUINT64;
       when uint(32) do return ARROWUINT32;
-      when uint(8) do return ARROWUINT8;
       when real do return ARROWDOUBLE;
       when bool do return ARROWBOOLEAN;
       when string do return ARROWSTRING;
@@ -162,22 +160,14 @@ module Parquet {
     }
   }
 
-  proc getVersionInfo() {
+  proc getVersionInfo(): string throws {
     extern proc c_getVersionInfo(): c_ptrConst(c_char);
-    extern proc strlen(str): c_int;
     extern proc c_free_string(ptr);
 
     const cVersionString = c_getVersionInfo();
     defer c_free_string(cVersionString: c_ptr(void));
 
-    var version: string;
-    try {
-      version = string.createCopyingBuffer(cVersionString,
-                                           strlen(cVersionString));
-    } catch {
-      version = "Error converting Arrow version message to Chapel string";
-    }
-    return version;
+    return string.createCopyingBuffer(cVersionString);
   }
 
   inline proc readFilesByName(ref A: [] ?t, filenames: [] string, sizes: [] int,
@@ -522,7 +512,6 @@ module Parquet {
       when ARROWINT32   do return ArrowTypes.int32;
       when ARROWUINT32  do return ArrowTypes.uint32;
       when ARROWUINT64  do return ArrowTypes.uint64;
-      when ARROWUINT8   do return ArrowTypes.uint8;
       when ARROWBOOLEAN do return ArrowTypes.boolean;
       when ARROWSTRING  do return ArrowTypes.stringArr;
       when ARROWDOUBLE  do return ArrowTypes.double;
@@ -539,7 +528,6 @@ module Parquet {
       when ArrowTypes.int32     do return ARROWINT32;
       when ArrowTypes.uint64    do return ARROWUINT64;
       when ArrowTypes.uint32    do return ARROWUINT32;
-      when ArrowTypes.uint8     do return ARROWUINT8;
       when ArrowTypes.boolean   do return ARROWBOOLEAN;
       when ArrowTypes.stringArr do return ARROWSTRING;
       when ArrowTypes.double    do return ARROWDOUBLE;
@@ -564,25 +552,22 @@ module Parquet {
     return typeFromCType(call.retVal);
   }
 
-  proc getListData(filename: string, dsetname: string,
-                   unsupportedAsNotImplemented=false) throws {
+  proc getListData(filename: string, dsetname: string) throws {
     extern proc c_getListType(filename, dsetname, errMsg): c_int;
 
     var call = new parquetCall(getL(), getR(), getM());
-    var listType: c_int;
     manage call {
-      listType = c_getListType(filename.localize().c_str(),
+      call.retVal = c_getListType(filename.localize().c_str(),
                                dsetname.localize().c_str(),
                                call.errMsg);
 
-      call.retVal = if unsupportedAsNotImplemented && listType == ARROWERROR
-                      then 0
-                      else listType;
+      if call.retVal == ARROWLIST {
+        throw new ParquetError("List element types cannot be list");
+      }
     }
     if call.err then throw call.err;
 
-    if listType == ARROWERROR then return ArrowTypes.notimplemented;
-    return typeFromCType(listType);
+    return typeFromCType(call.retVal);
   }
 
   /*
@@ -1144,38 +1129,23 @@ module Parquet {
     var numBytes: int;
   }
 
-  /*
-     Backing store for a single locale's zero-based segment offsets of a
-     SegArray column registered with `pqWriteOp`. The offsets must outlive the
-     `registerListColumn` call (they are handed to the C++ writer as a raw
-     pointer at `write()` time), so they are kept alive in a per-locale list on
-     the owning `pqWriteOp`.
-  */
+    /*
+      Backing store for locale-local offsets and values registered with
+      `pqWriteOp`. These arrays must outlive registration because their raw
+      pointers are handed to the C++ writer at `write()` time.
+    */
   class PqBuffer { }
 
-  class SegOffsetBuffer : PqBuffer {
-    var d: domain(1);
-    var data: [d] int;
-  }
-
-  class TypedDataBuffer : PqBuffer {
+  class Buffer : PqBuffer {
     type eltType;
     var d: domain(1);
     var data: [d] eltType;
   }
 
   private proc copyToBuffer(const ref values: [] ?t, start: int, count: int) {
-    var buffer = new shared TypedDataBuffer(t, {0..#count});
+    var buffer = new shared Buffer(t, {0..#count});
     if count > 0 then
       buffer.data = values[start..#count];
-    return buffer;
-  }
-
-  private proc widenUInt8Buffer(const ref values: [] uint(8), start: int,
-                                count: int) {
-    var buffer = new shared TypedDataBuffer(int(32), {0..#count});
-    if count > 0 then
-      buffer.data = values[start..#count]:int(32);
     return buffer;
   }
 
@@ -1202,52 +1172,24 @@ module Parquet {
     proc ref registerColumn(const A: [] ?eltType, colName: string) {
       // TODO check domain alignment
 
-      if eltType == uint(8) {
-        coforall (loc, localInfo, localBufs) in
-            zip(sharedDom.targetLocales(), info, buffers) {
-          on loc {
-            const ref localSubDom = A.localSubdomain();
-            const start = if localSubDom.size > 0 then localSubDom.low else 0;
-            const dataBuf = widenUInt8Buffer(A, start, localSubDom.size);
-            localBufs.pushBack(dataBuf);
+      coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
+        on loc {
+          const ref localSubDom = A.localSubdomain();
 
-            const ptr: c_ptrConst(void) =
-                if localSubDom.size > 0
-                  then c_ptrToConst(dataBuf.data[0]):c_ptrConst(void)
-                  else nil;
+          var ptr: c_ptrConst(void) = nil;
+          if localSubDom.size > 0 then
+            ptr = c_pointer_return_const(A[localSubDom.first]);
 
-            localInfo.pushBack(
-              new pqWriteLocalChunkInfo(colName.localize(),
-                                          ptr,
-                                          nil,
-                                          nil,
-                                          ARROWUINT8,
-                                          PDARRAY,
-                                          localSubDom.size,
-                                          localSubDom.size,
-                                          0));
-          }
-        }
-      } else {
-        coforall (loc, localInfo) in zip(sharedDom.targetLocales(), info) {
-          on loc {
-            const ref localSubDom = A.localSubdomain();
-
-            var ptr: c_ptrConst(void) = nil;
-            if localSubDom.size > 0 then
-              ptr = c_pointer_return_const(A[localSubDom.first]);
-
-            localInfo.pushBack(
-              new pqWriteLocalChunkInfo(colName.localize(),
-                                          ptr,
-                                          nil,
-                                          nil,
-                                          chplTypeToCType(eltType),
-                                          PDARRAY,
-                                          localSubDom.size,
-                                          localSubDom.size,
-                                          0));
-          }
+          localInfo.pushBack(
+            new pqWriteLocalChunkInfo(colName.localize(),
+                                        ptr,
+                                        nil,
+                                        nil,
+                                        chplTypeToCType(eltType),
+                                        PDARRAY,
+                                        localSubDom.size,
+                                        localSubDom.size,
+                                        0));
         }
       }
 
@@ -1255,7 +1197,7 @@ module Parquet {
     }
 
     proc ref registerStrColumn(const offsets: [] int,
-                               const ref values: [] uint(8),
+                               const ref values: [] int,
                                colName: string) {
       coforall (loc, localInfo, localBufs) in
           zip(sharedDom.targetLocales(), info, buffers) {
@@ -1268,7 +1210,7 @@ module Parquet {
                             else offsets[rowDom.high + 1];
           const localByteCount = endByte - startByte;
 
-          var offsetBuf = new shared SegOffsetBuffer({0..#rowDom.size});
+          var offsetBuf = new shared Buffer(int, {0..#rowDom.size});
           for i in 0..#rowDom.size do
             offsetBuf.data[i] = offsets[rowDom.low + i] - startByte;
           localBufs.pushBack(offsetBuf);
@@ -1307,16 +1249,16 @@ module Parquet {
        per list into `values`, and `values` holds the concatenated list
        elements. The list column is written as a nested Arrow LIST column,
        matching the layout produced by `writeListColumn`. Supported value types
-      are int(64), uint(64), uint(8), real, and bool; string lists use
+      are int(64), uint(64), real, and bool; string lists use
        `registerStrListColumn`.
     */
     proc ref registerListColumn(const segments: [] int,
                                 const values: [] ?eltType,
                                 colName: string) {
       if eltType != int(64) && eltType != uint(64) &&
-         eltType != uint(8) && eltType != real && eltType != bool then
+         eltType != real && eltType != bool then
         compilerError("registerListColumn supports int(64), uint(64), real, " +
-                      "uint(8), and bool value types; got ", eltType:string,
+                      "and bool value types; got ", eltType:string,
                       ".");
 
       const c_dtype = chplTypeToCType(eltType);
@@ -1334,7 +1276,7 @@ module Parquet {
                            then values.size
                            else segments[segDom.high + 1];
           const numValues = endVal - startVal;
-          var buf = new shared SegOffsetBuffer({0..#segDom.size});
+          var buf = new shared Buffer(int, {0..#segDom.size});
           for j in 0..#segDom.size do
             buf.data[j] = segments[segDom.low + j] - startVal;
           localBufs.pushBack(buf);
@@ -1344,17 +1286,10 @@ module Parquet {
             segPtr = c_ptrToConst(buf.data[0]): c_ptrConst(void);
 
           var valPtr: c_ptrConst(void) = nil;
-          if eltType == uint(8) {
-            const dataBuf = widenUInt8Buffer(values, startVal, numValues);
-            localBufs.pushBack(dataBuf);
-            if numValues > 0 then
-              valPtr = c_ptrToConst(dataBuf.data[0]):c_ptrConst(void);
-          } else {
-            const dataBuf = copyToBuffer(values, startVal, numValues);
-            localBufs.pushBack(dataBuf);
-            if numValues > 0 then
-              valPtr = c_ptrToConst(dataBuf.data[0]):c_ptrConst(void);
-          }
+          const dataBuf = copyToBuffer(values, startVal, numValues);
+          localBufs.pushBack(dataBuf);
+          if numValues > 0 then
+            valPtr = c_ptrToConst(dataBuf.data[0]):c_ptrConst(void);
 
           localInfo.pushBack(
               new pqWriteLocalChunkInfo(colName.localize(),
@@ -1400,7 +1335,7 @@ module Parquet {
           const numStrings = strEndIdx - strStartIdx;
 
           // Rebase segment offsets to index from 0 into this locale's strings.
-          var segBuf = new shared SegOffsetBuffer({0..#segDom.size});
+          var segBuf = new shared Buffer(int, {0..#segDom.size});
           for j in 0..#segDom.size do
             segBuf.data[j] = segments[segDom.low + j] - strStartIdx;
           localBufs.pushBack(segBuf);
@@ -1415,7 +1350,7 @@ module Parquet {
           const numByteVals = byteEndIdx - byteStartIdx;
 
           // Rebase byte offsets to index from 0 into this locale's bytes.
-          var byteBuf = new shared SegOffsetBuffer({0..#numStrings});
+          var byteBuf = new shared Buffer(int, {0..#numStrings});
           for k in 0..#numStrings do
             byteBuf.data[k] = offsets[strStartIdx + k] - byteStartIdx;
           localBufs.pushBack(byteBuf);
@@ -1606,8 +1541,7 @@ module Parquet {
                                          c_ptrToConst(defLvl), nil);
                 }
               } else if kind == ARROWINT64 || kind == ARROWUINT64 ||
-                        kind == ARROWUINT8 || kind == ARROWBOOLEAN ||
-                        kind == ARROWDOUBLE {
+                        kind == ARROWBOOLEAN || kind == ARROWDOUBLE {
                 var col_writer = rg_writer.NextColumn();
                 const batchData =
                     ((data: c_ptrConst(uint(8))) +
@@ -1637,7 +1571,6 @@ module Parquet {
   // offset into a SegArray's flat value buffer during writes.
   private proc arrowElemSize(kind: int): int {
     if kind == ARROWBOOLEAN then return 1;
-    if kind == ARROWUINT8 then return 4;
     return 8;
   }
 
@@ -1704,8 +1637,6 @@ module Parquet {
         return ARROWINT64;
       } when 'uint32' {
         return ARROWUINT32;
-      } when 'uint8' {
-        return ARROWUINT8;
       } when 'uint64' {
         return ARROWUINT64;
       } when 'bool' {

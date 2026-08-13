@@ -11,7 +11,10 @@ import BlockDist.blockDist;
 config const n = 100;
 
 proc testVersionInfo(test: borrowed Test) throws {
-  test.assertFalse(getVersionInfo().isEmpty());
+  const version = getVersionInfo();
+  test.assertEqual(version.count("."), 2);
+  for component in version.split(".") do
+    test.assertTrue(component.isDigit());
 }
 
 proc testMultiColWriteRead(test: borrowed Test) throws {
@@ -41,14 +44,13 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
     const boolArr : [1..10] bool = true;
     const intArr : [1..10] int = 7;
     const uintArr : [1..10] uint = 8;
-    const uint8Arr : [1..10] uint(8) = 9:uint(8);
 
     const filePath = Path.joinPath(temp.path,
                                    "variousTypes.parquet");
 
-    const names = ("DoubleArr", "BoolArr", "IntArr", "UintArr", "Uint8Arr");
+    const names = ("DoubleArr", "BoolArr", "IntArr", "UintArr");
     writeTable(filePath, colNames=names,
-          doubleArr, boolArr, intArr, uintArr, uint8Arr);
+          doubleArr, boolArr, intArr, uintArr);
 
     var doubleIn: [1..10] real;
     readColumn(filePath, "DoubleArr", doubleIn);
@@ -65,22 +67,17 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
     var uintIn: [1..10] uint;
     readColumn(filePath, "UintArr", uintIn);
     test.assertEqual(uintArr, uintIn);
-
-    var uint8In: [1..10] uint(8);
-    readColumn(filePath, "Uint8Arr", uint8In);
-    test.assertEqual(uint8Arr, uint8In);
-    test.assertEqual(getArrType(filePath, "Uint8Arr"), ArrowTypes.uint8);
   }
 }
 
 proc testMultiColEmptyStringIsNotNull(test: borrowed Test) throws {
   var ints = blockDist.createArray(0..#3, int);
   var offsets = blockDist.createArray(0..#3, int);
-  var values = blockDist.createArray(0..#6, uint(8));
+  var values = blockDist.createArray(0..#6, int);
   ints = [1, 2, 3];
   offsets = [0, 2, 3];
-  values = ["a".toByte(), 0:uint(8), 0:uint(8),
-            "b".toByte(), "b".toByte(), 0:uint(8)];
+  values = ["a".toByte(), 0, 0,
+            "b".toByte(), "b".toByte(), 0];
 
   manage new tempDir() as temp {
     const filePath = Path.joinPath(temp.path, "emptyString.parquet");
@@ -183,48 +180,6 @@ proc testMultiColListEmptySegments(test: borrowed Test) throws {
   }
 }
 
-proc testUInt8ListWriteRead(test: borrowed Test) throws {
-  var segments = blockDist.createArray(0..#3, int);
-  var values = blockDist.createArray(0..#6, uint(8));
-  segments = [0, 3, 3];
-  values = [0:uint(8), 1:uint(8), 255:uint(8),
-            3:uint(8), 4:uint(8), 200:uint(8)];
-
-  manage new tempDir() as temp {
-    const filePath = Path.joinPath(temp.path, "uint8list.parquet");
-
-    writeListColumn(filePath, "lists", segments, values);
-
-    test.assertEqual(getArrType(filePath, "lists"), ArrowTypes.list);
-    test.assertEqual(getListData(filePath, "lists"), ArrowTypes.uint8);
-
-    var segSizes: [0..#3] int;
-    test.assertEqual(getListColSize(filePath, "lists", segSizes), 6);
-    test.assertEqual(segSizes, [3, 0, 3]);
-
-    var valuesIn: [0..#6] uint(8);
-    var rowsPerFile = [3];
-    var readSegments: [0..#3] int;
-    var readOffsets: [0..#3] int;
-    readListFilesByName(valuesIn, rowsPerFile, readSegments, readOffsets,
-                        [filePath], [6], "lists", ArrowTypes.uint8);
-    test.assertEqual(values, valuesIn);
-  }
-
-  manage new tempDir() as temp {
-    const filePath = Path.joinPath(temp.path, "uint8list_multi.parquet");
-    var flat = blockDist.createArray(0..#3, int);
-    flat = [10, 20, 30];
-
-    var op = new pqWriteOp(filePath, flat.domain);
-    op.registerColumn(flat, "flat");
-    op.registerListColumn(segments, values, "lists");
-    op.write();
-
-    test.assertEqual(getListData(filePath, "lists"), ArrowTypes.uint8);
-  }
-}
-
 // Multi-column single-file write mixing a flat pdarray column with a
 // list-of-strings (SegArray of strings) column: [["a", "bb"], ["ccc"], []].
 // Exercises the SEGARRAY + ARROWSTRING path of registerStrListColumn,
@@ -235,7 +190,7 @@ proc testMultiColWithStrListColumn(test: borrowed Test) throws {
 
   var segments = blockDist.createArray(0..#3, int);   // per-list start string
   var offsets = blockDist.createArray(0..#3, int);    // per-string start byte
-  var vals = blockDist.createArray(0..#9, uint(8));   // null-terminated bytes
+  var vals = blockDist.createArray(0..#9, uint(8)); // null-terminated bytes
   segments = [0, 2, 3];
   offsets = [0, 2, 5];
   // "a\0" "bb\0" "ccc\0"
@@ -310,23 +265,6 @@ proc testWriteRead(test: borrowed Test) throws {
     readColumn(filename=filePath, colName="Arr", Arr=ArrIn);
 
     test.assertEqual(+ reduce ArrIn, val*n);
-  }
-}
-
-proc testUInt8WriteRead(test: borrowed Test) throws {
-  var ArrOut, ArrIn = blockDist.createArray(1..n, uint(8));
-  forall i in ArrOut.domain do ArrOut[i] = (i % 256):uint(8);
-
-  manage new tempDir() as temp {
-    const filePath = Path.joinPath(temp.path, "testUInt8WriteRead.parquet");
-
-    write1DDistArrayParquet(filePath, "Arr", CompressionType.NONE, TRUNCATE,
-                            ArrOut);
-
-    test.assertEqual(getAllTypes(filePath)[0], ARROWUINT8);
-
-    readColumn(filename=filePath, colName="Arr", Arr=ArrIn);
-    test.assertEqual(ArrOut, ArrIn);
   }
 }
 

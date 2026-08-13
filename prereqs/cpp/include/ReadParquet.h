@@ -42,8 +42,6 @@ namespace akcpp {
     template<typename ArrowType>
     int64_t read();
 
-    int64_t readUInt8();
-
     template<typename Types>
     int64_t _readShortIntegral();
   };

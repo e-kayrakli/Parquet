@@ -48,8 +48,6 @@ int cpp_writeColumnToParquet(const char* filename, void* chpl_arr,
       fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::INT64, parquet::ConvertedType::NONE));
     else if(dtype == ARROWUINT64)
       fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::INT64, parquet::ConvertedType::UINT_64));
-    else if(dtype == ARROWUINT8)
-      fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::INT32, parquet::ConvertedType::UINT_8));
     else if(dtype == ARROWBOOLEAN)
       fields.push_back(parquet::schema::PrimitiveNode::Make(dsetname, parquet::Repetition::REQUIRED, parquet::Type::BOOLEAN, parquet::ConvertedType::NONE));
     else if(dtype == ARROWDOUBLE)
@@ -94,23 +92,6 @@ int cpp_writeColumnToParquet(const char* filename, void* chpl_arr,
         if(numLeft < rowGroupSize)
           batchSize = numLeft;
         int64_writer->WriteBatch(batchSize, nullptr, nullptr, &chpl_ptr[i]);
-        numLeft -= batchSize;
-        i += batchSize;
-      }
-    } else if(dtype == ARROWUINT8) {
-      auto chpl_ptr = (uint8_t*)chpl_arr;
-      while(numLeft > 0) {
-        parquet::RowGroupWriter* rg_writer = file_writer->AppendRowGroup();
-        parquet::Int32Writer* writer =
-          static_cast<parquet::Int32Writer*>(rg_writer->NextColumn());
-
-        int64_t batchSize = rowGroupSize;
-        if(numLeft < rowGroupSize)
-          batchSize = numLeft;
-        std::vector<int32_t> widened(batchSize);
-        for(int64_t j = 0; j < batchSize; j++)
-          widened[j] = static_cast<int32_t>(chpl_ptr[i+j]);
-        writer->WriteBatch(batchSize, nullptr, nullptr, widened.data());
         numLeft -= batchSize;
         i += batchSize;
       }
@@ -340,11 +321,6 @@ int cpp_writeListColumnToParquet(const char* filename, void* chpl_segs, void* ch
       auto list = parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
       fields.push_back(parquet::schema::GroupNode::Make(dsetname, parquet::Repetition::OPTIONAL, {list}, parquet::ConvertedType::LIST));
     }
-    else if (dtype == ARROWUINT8) {
-      auto element = parquet::schema::PrimitiveNode::Make("item", parquet::Repetition::OPTIONAL, parquet::Type::INT32, parquet::ConvertedType::UINT_8);
-      auto list = parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
-      fields.push_back(parquet::schema::GroupNode::Make(dsetname, parquet::Repetition::OPTIONAL, {list}, parquet::ConvertedType::LIST));
-    }
     else if (dtype == ARROWBOOLEAN) {
       auto element = parquet::schema::PrimitiveNode::Make("item", parquet::Repetition::OPTIONAL, parquet::Type::BOOLEAN, parquet::ConvertedType::NONE);
       auto list = parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
@@ -407,38 +383,6 @@ int cpp_writeListColumnToParquet(const char* filename, void* chpl_segs, void* ch
           else {
             // empty segment denoted by null value that is not repeated (first of segment) defined at the list level (1)
             batchSize = 1; // even though segment is length=0, write null to hold the empty segment
-            int16_t def_lvl = 1;
-            int16_t rep_lvl = 0;
-            writer->WriteBatch(batchSize, &def_lvl, &rep_lvl, nullptr);
-          }
-          count++;
-          segIdx++;
-          numLeft--;
-        }
-      }
-    }
-    else if (dtype == ARROWUINT8) {
-      while(numLeft > 0) {
-        parquet::RowGroupWriter* rg_writer = file_writer->AppendRowGroup();
-        parquet::Int32Writer* writer =
-          static_cast<parquet::Int32Writer*>(rg_writer->NextColumn());
-        int64_t count = 0;
-        while (numLeft > 0 && count < rowGroupSize) {
-          int64_t batchSize = segments[segIdx+1] - segments[segIdx];
-          if (batchSize > 0) {
-            auto chpl_ptr = (uint8_t*)chpl_arr;
-            std::vector<int32_t> widened(batchSize);
-            std::vector<int16_t> def_lvl(batchSize, 3);
-            std::vector<int16_t> rep_lvl(batchSize, 1);
-            rep_lvl[0] = 0;
-            for (int64_t x = 0; x < batchSize; x++)
-              widened[x] = static_cast<int32_t>(chpl_ptr[valIdx+x]);
-            writer->WriteBatch(batchSize, def_lvl.data(), rep_lvl.data(),
-                               widened.data());
-            valIdx += batchSize;
-          }
-          else {
-            batchSize = 1;
             int16_t def_lvl = 1;
             int16_t rep_lvl = 0;
             writer->WriteBatch(batchSize, &def_lvl, &rep_lvl, nullptr);
@@ -587,14 +531,6 @@ int cpp_writeMultiColNumericToParquet(const char* filename, void* column_names,
               static_cast<parquet::Int64Writer*>(rg_writer->NextColumn());
 
           writer->WriteBatch(batchSize, nullptr, nullptr, &data_ptr[x]);
-        } else if(dtype == ARROWUINT8) {
-          auto data_ptr = (uint8_t*)ptr_arr[i];
-          parquet::Int32Writer* writer =
-              static_cast<parquet::Int32Writer*>(rg_writer->NextColumn());
-          std::vector<int32_t> widened(batchSize);
-          for(int64_t j = 0; j < batchSize; j++)
-            widened[j] = static_cast<int32_t>(data_ptr[x+j]);
-          writer->WriteBatch(batchSize, nullptr, nullptr, widened.data());
         } else if(dtype == ARROWBOOLEAN) {
           auto data_ptr = (bool*)ptr_arr[i];
           parquet::BoolWriter* writer =
@@ -816,53 +752,6 @@ int cpp_writeMultiColToParquet(const char* filename, void* column_names,
             }
           } else {
             writer->WriteBatch(batchSize, nullptr, nullptr, &data_ptr[x]);
-          }
-        } else if(dtype == ARROWUINT8) {
-          auto data_ptr = (uint8_t*)ptr_arr[i];
-          parquet::Int32Writer* writer =
-            static_cast<parquet::Int32Writer*>(rg_writer->NextColumn());
-          if (objType_ptr[i] == SEGARRAY) {
-            auto offset_ptr = (int64_t*)offset_arr[i];
-            int64_t offIdx = 0;
-
-            if (x > 0) {
-              offIdx = idxQueue_segarray.front();
-              idxQueue_segarray.pop();
-            }
-
-            int64_t count = 0;
-            while (count < batchSize) {
-              int64_t segSize = offIdx == numelems - 1
-                                  ? saSizes_ptr[i] - offset_ptr[offIdx]
-                                  : offset_ptr[offIdx+1] - offset_ptr[offIdx];
-              if (segSize > 0) {
-                const int64_t valIdx = offset_ptr[offIdx];
-                std::vector<int32_t> widened(segSize);
-                std::vector<int16_t> def_lvl(segSize, 3);
-                std::vector<int16_t> rep_lvl(segSize, 1);
-                rep_lvl[0] = 0;
-                for (int64_t s = 0; s < segSize; s++)
-                  widened[s] = static_cast<int32_t>(data_ptr[valIdx+s]);
-                writer->WriteBatch(segSize, def_lvl.data(), rep_lvl.data(),
-                                   widened.data());
-              }
-              else {
-                segSize = 1;
-                int16_t def_lvl = 1;
-                int16_t rep_lvl = 0;
-                writer->WriteBatch(segSize, &def_lvl, &rep_lvl, nullptr);
-              }
-              offIdx++;
-              count++;
-            }
-            if (numLeft - count > 0)
-              idxQueue_segarray.push(offIdx);
-          }
-          else {
-            std::vector<int32_t> widened(batchSize);
-            for(int64_t j = 0; j < batchSize; j++)
-              widened[j] = static_cast<int32_t>(data_ptr[x+j]);
-            writer->WriteBatch(batchSize, nullptr, nullptr, widened.data());
           }
         } else if(dtype == ARROWBOOLEAN) {
           auto data_ptr = (bool*)ptr_arr[i];
