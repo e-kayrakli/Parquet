@@ -1182,14 +1182,14 @@ module Parquet {
 
           localInfo.pushBack(
             new pqWriteLocalChunkInfo(colName.localize(),
-                                        ptr,
-                                        nil,
-                                        nil,
-                                        chplTypeToCType(eltType),
-                                        PDARRAY,
-                                        localSubDom.size,
-                                        localSubDom.size,
-                                        0));
+                                      ptr,
+                                      nil,
+                                      nil,
+                                      chplTypeToCType(eltType),
+                                      PDARRAY,
+                                      localSubDom.size,
+                                      localSubDom.size,
+                                      0));
         }
       }
 
