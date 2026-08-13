@@ -40,7 +40,6 @@ extern "C" {
 #define ARROWSTRING 6
 #define ARROWLIST 8
 #define ARROWDECIMAL 9
-#define ARROWUINT8 10
 #define ARROWERROR -1
 
 #define ARRAYVIEW 0 // not currently used, but included for continuity with Chapel
