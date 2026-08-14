@@ -301,7 +301,7 @@ int64_t ColReadOp::read<arrow::Decimal128Type>() {
 
 
 int readAllCols(const char* filename, void** chpl_arrs, int* types,
-                bool* where_null_chpl, int64_t numElems, int64_t startIdx,
+                bool** where_null_chpl, int64_t numElems, int64_t startIdx,
                 int64_t batchSize,
                 chplEnum_t nullMode, char** errMsg) {
   try {
@@ -339,6 +339,9 @@ int readAllCols(const char* filename, void** chpl_arrs, int* types,
           file_metadata->schema()->Column(col_idx);
 
         void* chpl_arr = chpl_arrs[col_idx];
+        bool* col_where_null = nullMode == all
+               ? where_null_chpl[col_idx]
+               : nullptr;
 
         // TODO, I want values of this type to be created per read operation,
         // not per column, per rowgroup
@@ -352,7 +355,7 @@ int readAllCols(const char* filename, void** chpl_arrs, int* types,
                               row_idx,
                               numElems,
                               batchSize,
-                              where_null_chpl,
+                              col_where_null,
                               col_info };
 
         int64_t nread;
@@ -1190,7 +1193,7 @@ extern "C" {
   }
   
   int c_readAllCols(const char* filename, void** chpl_arrs, int* types,
-                         bool* where_null_chpl, int64_t numElems,
+                         bool** where_null_chpl, int64_t numElems,
                          int64_t startIdx, int64_t batchSize,
                          chplEnum_t nullMode, char** errMsg) {
     return akcpp::readAllCols(filename, chpl_arrs, types, where_null_chpl,

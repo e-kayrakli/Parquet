@@ -10,6 +10,12 @@ import BlockDist.blockDist;
 
 config const n = 100;
 
+proc testVersionInfo(test: borrowed Test) throws {
+  const version = getVersionInfo();
+  test.assertEqual(version.count("."), 2);
+  for component in version.split(".") do
+    test.assertTrue(component.isDigit());
+}
 
 proc testMultiColWriteRead(test: borrowed Test) throws {
   var Arr1, Arr2, Arr3: [1..10] int;
@@ -45,7 +51,7 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
 
     const names = ("DoubleArr", "BoolArr", "IntArr", "UintArr");
     writeTable(filePath, colNames=names,
-                doubleArr, boolArr, intArr, uintArr);
+               doubleArr, boolArr, intArr, uintArr);
 
     var doubleIn: [1..10] real;
     readColumn(filePath, "DoubleArr", doubleIn);
@@ -62,6 +68,30 @@ proc testMultiColWriteRead(test: borrowed Test) throws {
     var uintIn: [1..10] uint;
     readColumn(filePath, "UintArr", uintIn);
     test.assertEqual(uintArr, uintIn);
+  }
+}
+
+proc testMultiColEmptyStringIsNotNull(test: borrowed Test) throws {
+  var ints = blockDist.createArray(0..#3, int);
+  var offsets = blockDist.createArray(0..#3, int);
+  var values = blockDist.createArray(0..#6, uint(8));
+  ints = [1, 2, 3];
+  offsets = [0, 2, 3];
+  values = ["a".toByte(), 0:uint(8), 0:uint(8),
+            "b".toByte(), "b".toByte(), 0:uint(8)];
+
+  manage new tempDir() as temp {
+    const filePath = Path.joinPath(temp.path, "emptyString.parquet");
+
+    var op = new pqWriteOp(filePath, ints.domain);
+    op.registerColumn(ints, "ints");
+    op.registerStrColumn(offsets, values, "strings");
+    op.write();
+
+    var nullIndices: [0..#3] int;
+    getNullIndices(nullIndices, [filePath], [3], "strings",
+                   ArrowTypes.stringArr);
+    test.assertEqual(nullIndices, [0, 0, 0]);
   }
 }
 
@@ -165,10 +195,11 @@ proc testMultiColWithStrListColumn(test: borrowed Test) throws {
   segments = [0, 2, 3];
   offsets = [0, 2, 5];
   // "a\0" "bb\0" "ccc\0"
-  vals[0] = "a".toByte(); vals[1] = 0;
-  vals[2] = "b".toByte(); vals[3] = "b".toByte(); vals[4] = 0;
-  vals[5] = "c".toByte(); vals[6] = "c".toByte(); vals[7] = "c".toByte();
-  vals[8] = 0;
+  vals = [
+    "a".toByte(), 0:uint(8),
+    "b".toByte(), "b".toByte(), 0:uint(8),
+    "c".toByte(), "c".toByte(), "c".toByte(), 0:uint(8)
+  ];
 
   manage new tempDir() as temp {
     const filePath = Path.joinPath(temp.path, "multistrlist.parquet");
