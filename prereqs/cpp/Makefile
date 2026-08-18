@@ -21,7 +21,9 @@ CXXFLAGS=-I$(INCDIR) -std=c++20
 # Override at invocation time if needed (e.g., PIC_CXXFLAGS="").
 PIC_CXXFLAGS ?= -fPIC
 
-ifneq ($(shell pkg-config --exists arrow parquet 2>/dev/null && echo yes),)
+# use --modversion to check if arrow/parquet are installed. --exists can report
+# false negatives if there are "malformed" .pc files (especially true for arrow/parquet)
+ifneq ($(shell pkg-config --modversion arrow parquet 2>/dev/null && echo yes),)
   ARROW_CFLAGS := $(shell pkg-config --cflags arrow parquet)
   ARROW_LDFLAGS := $(shell pkg-config --libs arrow parquet)
   ARROW_LIBDIR := $(shell pkg-config --variable=libdir arrow)
