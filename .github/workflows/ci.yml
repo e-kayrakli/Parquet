@@ -59,9 +59,14 @@ jobs:
       image: chapel/chapel:${{ matrix.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Build arrow/parquet dependencies
-        run: |
-          NUM_CORES=$(nproc) ./build_arrow.sh
+      - name: Build arrow/parquet dependencies (retrying)
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          timeout_seconds: 60
+          retry_wait_seconds: 30
+          command: |
+            NUM_CORES=$(nproc) ./build_arrow.sh
       - name: Check the project builds
         run: |
           . ./arrow.sh
