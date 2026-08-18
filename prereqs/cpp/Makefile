@@ -21,6 +21,14 @@ CXXFLAGS=-I$(INCDIR) -std=c++20
 # Override at invocation time if needed (e.g., PIC_CXXFLAGS="").
 PIC_CXXFLAGS ?= -fPIC
 
+SANITIZER_CXXFLAGS =
+
+SANITIZER = $(shell $(CHPL_HOME)/util/chplenv/chpl_sanitizers.py --exe 2>/dev/null)
+SANITIZER_CXXFLAGS =
+ifneq ($(SANITIZER),none)
+SANITIZER_CXXFLAGS = -fsanitize=$(SANITIZER)
+endif
+
 # use --modversion to check if arrow/parquet are installed. --exists can report
 # false negatives if there are "malformed" .pc files (especially true for arrow/parquet)
 ifneq ($(shell pkg-config --modversion arrow parquet 2>/dev/null && echo yes),)
@@ -39,6 +47,7 @@ endif
 
 CXXFLAGS+=$(ARROW_CFLAGS)
 CXXFLAGS+=$(PIC_CXXFLAGS)
+CXXFLAGS+=$(SANITIZER_CXXFLAGS)
 
 # also add the src directory to be able to include SharedEnums without
 # relative path. This path is relative to prereqs/cpp
