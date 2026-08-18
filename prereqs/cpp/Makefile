@@ -37,6 +37,40 @@ ifneq ($(shell pkg-config --modversion arrow parquet 2>/dev/null && echo yes),)
   ARROW_LIBDIR := $(shell pkg-config --variable=libdir arrow)
 endif
 
+# returns "yes" if either argument is empty or the libdir does not exist on
+# disk, otherwise empty
+arrow_needs_lookup = $(if $(and $(1),$(2),$(wildcard $(2))),,yes)
+
+# if eother CFLAGS or LIBDIR are empty, try to compute them based on prefix
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PREFIX := $(shell pkg-config --variable=prefix arrow 2>/dev/null)
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PREFIX := $(shell pkg-config --variable=prefix arrow 2>/dev/null)
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib64
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+
+# if either CFLAGS or LIBDIR are still empty, try and compute them from pcfiledir
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PCFILEDIR := $(shell pkg-config --variable=pcfiledir arrow 2>/dev/null)
+  ARROW_PREFIX := $(patsubst %/lib/pkgconfig,%,$(ARROW_PCFILEDIR))
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PCFILEDIR := $(shell pkg-config --variable=pcfiledir arrow 2>/dev/null)
+  ARROW_PREFIX := $(patsubst %/lib64/pkgconfig,%,$(ARROW_PCFILEDIR))
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib64
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+
 ifeq ($(ARROW_CFLAGS),)
   $(error Could not find Arrow/Parquet. Make sure Arrow/Parquet and pkg-config are installed and that pkg-config can find them.)
 endif
