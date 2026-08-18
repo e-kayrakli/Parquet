@@ -21,10 +21,54 @@ CXXFLAGS=-I$(INCDIR) -std=c++20
 # Override at invocation time if needed (e.g., PIC_CXXFLAGS="").
 PIC_CXXFLAGS ?= -fPIC
 
-ifneq ($(shell pkg-config --exists arrow parquet 2>/dev/null && echo yes),)
+SANITIZER_CXXFLAGS =
+
+SANITIZER = $(shell $(CHPL_HOME)/util/chplenv/chpl_sanitizers.py --exe 2>/dev/null)
+SANITIZER_CXXFLAGS =
+ifneq ($(SANITIZER),none)
+SANITIZER_CXXFLAGS = -fsanitize=$(SANITIZER)
+endif
+
+# use --modversion to check if arrow/parquet are installed. --exists can report
+# false negatives if there are "malformed" .pc files (especially true for arrow/parquet)
+ifneq ($(shell pkg-config --modversion arrow parquet 2>/dev/null && echo yes),)
   ARROW_CFLAGS := $(shell pkg-config --cflags arrow parquet)
   ARROW_LDFLAGS := $(shell pkg-config --libs arrow parquet)
   ARROW_LIBDIR := $(shell pkg-config --variable=libdir arrow)
+endif
+
+# returns "yes" if either argument is empty or the libdir does not exist on
+# disk, otherwise empty
+arrow_needs_lookup = $(if $(and $(1),$(2),$(wildcard $(2))),,yes)
+
+# if eother CFLAGS or LIBDIR are empty, try to compute them based on prefix
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PREFIX := $(shell pkg-config --variable=prefix arrow 2>/dev/null)
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PREFIX := $(shell pkg-config --variable=prefix arrow 2>/dev/null)
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib64
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+
+# if either CFLAGS or LIBDIR are still empty, try and compute them from pcfiledir
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PCFILEDIR := $(shell pkg-config --variable=pcfiledir arrow 2>/dev/null)
+  ARROW_PREFIX := $(patsubst %/lib/pkgconfig,%,$(ARROW_PCFILEDIR))
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
+endif
+ifeq ($(call arrow_needs_lookup,$(ARROW_CFLAGS),$(ARROW_LIBDIR)),yes)
+  ARROW_PCFILEDIR := $(shell pkg-config --variable=pcfiledir arrow 2>/dev/null)
+  ARROW_PREFIX := $(patsubst %/lib64/pkgconfig,%,$(ARROW_PCFILEDIR))
+  ARROW_LIBDIR := $(ARROW_PREFIX)/lib64
+  ARROW_CFLAGS := -I$(ARROW_PREFIX)/include
+  ARROW_LDFLAGS := -L$(ARROW_LIBDIR) -larrow -lparquet
 endif
 
 ifeq ($(ARROW_CFLAGS),)
@@ -37,6 +81,7 @@ endif
 
 CXXFLAGS+=$(ARROW_CFLAGS)
 CXXFLAGS+=$(PIC_CXXFLAGS)
+CXXFLAGS+=$(SANITIZER_CXXFLAGS)
 
 # also add the src directory to be able to include SharedEnums without
 # relative path. This path is relative to prereqs/cpp
