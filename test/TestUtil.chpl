@@ -12,8 +12,6 @@ module TestUtil {
       return this;
     }
 
-    // Taking `err` makes this manager responsible for it, so it has to be
-    // rethrown or assertion failures inside the block are silently dropped.
     proc ref exitContext(in err: owned Error?) throws {
       FS.rmTree(path);
       if err then throw err;
