@@ -20,11 +20,13 @@ proc testWriteRead(test: borrowed Test) throws {
   for i in 1..10 do 
     Arr4[i] = "str" + i:string;
 
-  const filePath = Path.joinPath("./",
-                                 "my.parquet");
+  manage new tempDir() as temp {
+    const filePath = Path.joinPath(temp.path,
+                                   "my.parquet");
 
-  writeTable(filePath, colNames=("Arr1", "Arr2", "Arr3", "Arr4"),
-             Arr1, Arr2, Arr3, Arr4);
+    writeTable(filePath, colNames=("Arr1", "Arr2", "Arr3", "Arr4"),
+               Arr1, Arr2, Arr3, Arr4);
+  }
 }
 
 UnitTest.main();
