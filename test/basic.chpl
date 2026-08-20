@@ -272,6 +272,7 @@ proc testWriteRead(test: borrowed Test) throws {
 // To test for segfault, use CHPL_TARGET_JEMALLOC=bundled
 // Old createAdoptingBuffer() call in datasets() and getDatasets()
 // caused segfault due to mismatching allocators
+// See https://github.com/chapel-lang/Parquet/issues/8
 proc testDatasets(test: borrowed Test) throws {
   const Arr: [1..100] int = 42;
   const Arr2: [1..100] int = 43;
