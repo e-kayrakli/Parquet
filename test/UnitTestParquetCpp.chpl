@@ -1,6 +1,9 @@
 // Copyright Hewlett Packard Enterprise Development LP.
 use Parquet, CTypes, FileSystem;
 use UnitTest;
+use TestUtil;
+
+import Path;
 
 private config const ROWGROUPS = 512*1024*1024 / numBytes(int); // 512 mb of int64
 
@@ -58,54 +61,58 @@ record parquetCall: contextManager {
 }
 
 proc testWriteRead(test: borrowed Test) throws {
-  const filename = "myFile.parquet";
-  const c_filename = filename.c_str();
+  manage new tempDir() as temp {
+    const filename = Path.joinPath(temp.path, "myFile.parquet");
+    const c_filename = filename.c_str();
 
-  const dsetname = "myDsetname";
-  const c_dsetname = dsetname.c_str();
+    const dsetname = "myDsetname";
+    const c_dsetname = dsetname.c_str();
 
-  const size = 1000;
+    const size = 1000;
 
-  var a: [0..#size] int;
-  for i in 0..#size do a[i] = i;
+    var a: [0..#size] int;
+    for i in 0..#size do a[i] = i;
 
-  // create the file
-  manage new parquetCall() as call do
-    call.retVal = c_writeColumnToParquet(c_filename, c_ptrTo(a), 0, c_dsetname,
-                                         size, 10000, false, 1, call.errMsg);
+    // create the file
+    manage new parquetCall() as call do
+      call.retVal = c_writeColumnToParquet(c_filename, c_ptrTo(a), 0,
+                                           c_dsetname, size, 10000, false, 1,
+                                           call.errMsg);
 
-  // check getNumRows
-  manage new parquetCall() as call {
-    call.retVal = c_getNumRows(c_filename, call.errMsg);
-    test.assertTrue(call.retVal == size);
-  }
-
-  // check getType returns something non-negative
-  manage new parquetCall() as call {
-    call.retVal = c_getType(c_filename, c_dsetname, call.errMsg);
-  }
-
-  // check dataset names
-  manage new parquetCall() as call {
-    var c_ret: c_ptr(c_char);
-    defer {
-      c_free_string(c_ret);
+    // check getNumRows
+    manage new parquetCall() as call {
+      call.retVal = c_getNumRows(c_filename, call.errMsg);
+      test.assertTrue(call.retVal == size);
     }
 
-    call.retVal = c_getDatasetNames(c_filename, c_ptrTo(c_ret), false, call.errMsg);
+    // check getType returns something non-negative
+    manage new parquetCall() as call {
+      call.retVal = c_getType(c_filename, c_dsetname, call.errMsg);
+    }
 
-    const ret = try! string.createCopyingBuffer(c_ret, strlen(c_ret));
-    test.assertTrue(ret == dsetname);
+    // check dataset names
+    manage new parquetCall() as call {
+      var c_ret: c_ptr(c_char);
+      defer {
+        c_free_string(c_ret);
+      }
+
+      call.retVal = c_getDatasetNames(c_filename, c_ptrTo(c_ret), false,
+                                      call.errMsg);
+
+      const ret = try! string.createCopyingBuffer(c_ret, strlen(c_ret));
+      test.assertTrue(ret == dsetname);
+    }
+
+    var b: [0..#size] int;
+    var whereNull: [0..0] bool;
+    manage new parquetCall() as call do
+      call.retVal = c_readColumnByName(c_filename, c_ptrTo(b),
+                                       c_ptrTo(whereNull), c_dsetname, size, 0,
+                                       10000, 1, false, call.errMsg);
+
+    test.assertTrue(a.equals(b));
   }
-
-  var b: [0..#size] int;
-  var whereNull: [0..0] bool;
-  manage new parquetCall() as call do
-    call.retVal = c_readColumnByName(c_filename, c_ptrTo(b), c_ptrTo(whereNull),
-                                     c_dsetname, size, 0, 10000, 1, false,
-                                     call.errMsg);
-
-  test.assertTrue(a.equals(b));
 }
 
 proc testInt32Read(test: borrowed Test) throws {
