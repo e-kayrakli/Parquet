@@ -59,7 +59,22 @@ jobs:
       image: chapel/chapel:${{ matrix.version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Determine Arrow version
+        run: |
+          ARROW_VERSION=$(sed -nE 's/^ARROW_VERSION=\$\{ARROW_VERSION:-"([^"]+)"\}/\1/p' build_arrow.sh)
+          echo "ARROW_VERSION=${ARROW_VERSION}" >> $GITHUB_ENV
+          ARROW_SCRIPT_SHA=$(sha256sum build_arrow.sh | cut -d' ' -f1)
+          echo "ARROW_SCRIPT_SHA=${ARROW_SCRIPT_SHA}" >> $GITHUB_ENV
+      - name: cache Arrow install
+        id: cache-arrow
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
+        with:
+          path: |
+            deps/arrow-${{ env.ARROW_VERSION }}
+            arrow.sh
+          key: arrow-${{ env.ARROW_VERSION }}-${{ env.ARROW_SCRIPT_SHA }}
       - name: Build arrow/parquet dependencies (retrying)
+        if: steps.cache-arrow.outputs.cache-hit != 'true'
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           max_attempts: 3

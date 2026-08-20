@@ -809,6 +809,7 @@ module Parquet {
   iter datasets(filename) {
     extern proc c_getDatasetNames(filename, dsetResult, readNested,
                                   errMsg): int(32);
+    extern proc c_free_string(ptr);
     var res: c_ptr(uint(8));
 
     manage new parquetCall(getL(), getR(), getM()) as call {
@@ -817,7 +818,8 @@ module Parquet {
                                       false,
                                       call.errMsg);
     }
-    const datasets = try! string.createAdoptingBuffer(res);
+    defer c_free_string(res: c_ptr(void));
+    const datasets = try! string.createCopyingBuffer(res);
 
     for s in datasets.split(",") do yield s;
   }
@@ -827,6 +829,7 @@ module Parquet {
   proc getDatasets(filename, readNested=false) throws {
     extern proc c_getDatasetNames(filename, dsetResult, readNested,
                                   errMsg): int(32);
+    extern proc c_free_string(ptr);
 
     var res: c_ptr(uint(8));
 
@@ -836,7 +839,8 @@ module Parquet {
                                       readNested,
                                       call.errMsg);
     }
-    const datasets = string.createAdoptingBuffer(res);
+    defer c_free_string(res: c_ptr(void));
+    const datasets = string.createCopyingBuffer(res);
 
     return new list(datasets.split(","));
   }
