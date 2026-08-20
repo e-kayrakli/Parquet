@@ -69,7 +69,9 @@ jobs:
         id: cache-arrow
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #v6.1.0
         with:
-          path: deps/arrow-${{ env.ARROW_VERSION }}
+          path: |
+            deps/arrow-${{ env.ARROW_VERSION }}
+            arrow.sh
           key: arrow-${{ env.ARROW_VERSION }}-${{ env.ARROW_SCRIPT_SHA }}
       - name: Build arrow/parquet dependencies (retrying)
         if: steps.cache-arrow.outputs.cache-hit != 'true'
