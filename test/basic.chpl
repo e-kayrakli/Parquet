@@ -234,14 +234,14 @@ proc testDistributedWriteRead(test: borrowed Test) throws {
   ArrOut = 2;
 
   manage new tempDir() as temp {
-    const filePath = Path.joinPath(temp.path,
-                                   "testDistributedWriteRead.parquet");
+    const baseName = "testDistributedWriteRead";
+    const filePath = Path.joinPath(temp.path, baseName + ".parquet");
 
     write1DDistArrayParquet(filePath, "Arr", CompressionType.NONE, TRUNCATE,
                             ArrOut);
 
     const files = FS.glob(Path.joinPath(temp.path,
-                                        "testDistributedWriteRead_LOCALE*.parquet"));
+                                        baseName + "_LOCALE*.parquet"));
     test.assertEqual(files.size, 1);
 
     readColumn(filename=files[0], colName="Arr", Arr=ArrIn);
