@@ -269,6 +269,26 @@ proc testWriteRead(test: borrowed Test) throws {
   }
 }
 
+// To test for segfault, use CHPL_TARGET_JEMALLOC=bundled
+// Old createAdoptingBuffer() call in datasets() and getDatasets()
+// caused segfault due to mismatching allocators
+proc testDatasets(test: borrowed Test) throws {
+  const Arr: [1..100] int = 42;
+  const Arr2: [1..100] int = 43;
+
+  manage new tempDir() as temp {
+    const filePath = Path.joinPath(temp.path, "testDatasets.parquet");
+    writeTable(filePath, colNames=("values", "values2"), Arr, Arr2);
+
+    const expected = ["values", "values2"];
+    const fromIter = for name in datasets(filePath) do name;
+    const fromList = getDatasets(filePath).toArray();
+
+    test.assertEqual(fromIter, expected);
+    test.assertEqual(fromList, expected);
+  }
+}
+
 proc testNumCols(test: borrowed Test) throws {
   const filename = "test/resources/multi-col.parquet";
 
