@@ -276,11 +276,12 @@ proc testDatasets(test: borrowed Test) throws {
   const Arr: [1..100] int = 42;
   const Arr2: [1..100] int = 43;
 
+  const expected = ["values1", "values2"];
+
   manage new tempDir() as temp {
     const filePath = Path.joinPath(temp.path, "testDatasets.parquet");
-    writeTable(filePath, colNames=("values", "values2"), Arr, Arr2);
+    writeTable(filePath, colNames=expected, Arr, Arr2);
 
-    const expected = ["values", "values2"];
     const fromIter = for name in datasets(filePath) do name;
     const fromList = getDatasets(filePath).toArray();
 
