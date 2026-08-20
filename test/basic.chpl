@@ -240,9 +240,11 @@ proc testDistributedWriteRead(test: borrowed Test) throws {
     write1DDistArrayParquet(filePath, "Arr", CompressionType.NONE, TRUNCATE,
                             ArrOut);
 
-    test.assertTrue(FS.isFile(filePath));
+    const files = FS.glob(Path.joinPath(temp.path,
+                                        "testDistributedWriteRead_LOCALE*.parquet"));
+    test.assertEqual(files.size, 1);
 
-    readColumn(filename=filePath, colName="Arr", Arr=ArrIn);
+    readColumn(filename=files[0], colName="Arr", Arr=ArrIn);
 
     test.assertEqual(ArrOut, ArrIn);
   }
