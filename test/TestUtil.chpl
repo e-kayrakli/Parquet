@@ -14,6 +14,7 @@ module TestUtil {
 
     proc ref exitContext(in err: owned Error?) throws {
       FS.rmTree(path);
+      if err then throw err;
     }
   }
 }
