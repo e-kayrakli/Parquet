@@ -1,4 +1,3 @@
-CXX = g++
 CHPL_CXX = $(shell $(CHPL_HOME)/util/chplenv/chpl_compiler.py --cxx --target)
 ifeq ($(CHPL_CXX),)
 CHPL_CXX=$(CXX)
